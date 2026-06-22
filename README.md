@@ -50,14 +50,48 @@
  Вы: ▮
 ```
 
-## Установка
+## Запуск
+
+### npx — без установки
+
+Самый быстрый способ. **Всегда добавляйте `@latest`** — иначе `npx` может взять закэшированную версию:
+
+```bash
+npx bartender-agent@latest
+```
+
+> Имя пакета — `bartender-agent`, а команда после глобальной установки — `bartender` (см. ниже). Через `npx` используется имя пакета.
+>
+> `--yes` подавляет запрос на установку (удобно в скриптах/CI): `npx --yes bartender-agent@latest`.
+
+### Глобальная установка
 
 ```bash
 npm install -g bartender-agent
 bartender
 ```
 
-Нужен Node ≥ 18. Конфиг — в `~/.bartender-agent/.env` (ниже). Ключи нигде не логируются и не уходят в prompt/history.
+Обновление до последней:
+
+```bash
+npm update -g bartender-agent
+```
+
+### Из исходников (для разработки)
+
+```bash
+git clone https://github.com/kalyaganov/bartender-agent.git
+cd bartender-agent
+npm install
+cp .env.example .env   # вписать API-ключ хотя бы одного провайдера
+npm run dev
+```
+
+В дев-режиме env подгружается из CWD `.env` через `tsx --env-file=.env`.
+
+## Конфигурация
+
+Нужен Node ≥ 18. Для всех способов запуска конфиг читается из `~/.bartender-agent/.env` (ключи нигде не логируются и не уходят в prompt/history):
 
 ```bash
 mkdir -p ~/.bartender-agent
@@ -74,18 +108,6 @@ EOF
 ```
 
 Переменные реального окружения (`export ...`) имеют приоритет над `.env` — удобно для CI/контейнеров.
-
-## Из исходников (для разработки)
-
-```bash
-git clone https://github.com/kalyaganov/bartender-agent.git
-cd bartender-agent
-npm install
-cp .env.example .env   # вписать API-ключ хотя бы одного провайдера
-npm run dev
-```
-
-В дев-режиме env подгружается из CWD `.env` через `tsx --env-file=.env`.
 
 ### Провайдеры
 
