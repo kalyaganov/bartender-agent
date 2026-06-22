@@ -10,7 +10,7 @@
 
 ### B1. Сохранение и загрузка сессии
 Продолжить разговор с того же места после перезапуска, восстанавливая опьянение/таб/историю.
-- **Файлы:** `state/store.ts` (serialize/deserialize), `src/persistence.ts` (новый, запись в `~/.homeagent/sessions/`), команда `/save` и `/load` в `agent/commands.ts`.
+- **Файлы:** `state/store.ts` (serialize/deserialize), `src/persistence.ts` (новый, запись в `~/.bartender-agent/sessions/`), команда `/save` и `/load` в `agent/commands.ts`.
 - **Усилие:** M
 - **Зависимости:** нет.
 

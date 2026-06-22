@@ -27,19 +27,20 @@ src/
   App.tsx             # роутер экранов: bar | selecting-provider | menu | exit-confirm
   bootstrap.ts        # загрузка: восстановление пресетов, выбор провайдера
   config.ts           # константы: пороги, таймеры, API-ключи из env
-  persistence.ts      # ~/.homeagent/ — пресисты (выбор провайдера)
+  persistence.ts      # ~/.bartender-agent/preferences.json (+ миграция из ~/.homeagent/)
+  shutdown.ts         # exitApp(): отмена хода, прощальная реплика, остановка tsx watch
   agent/
     loop.ts           # execution loop: стрим + диспетчер tool_call
     prompt.ts         # system prompt + state snapshot
     tools.ts          # инструмент bartender_action (JSON-схема)
     schemas.ts        # zod-схемы: Mood, Action, Drink, Drunkenness
-    commands.ts       # обработка /команд
+    commands.ts       # обработка /команд + CommandDef/COMMANDS для попапа
     providers/
-      types.ts        # интерфейс LLMProvider, StreamEvent
-      openai.ts       # OpenAI-compat (DeepSeek, GPT)
+      types.ts        # интерфейс LLMProvider, StreamEvent, ProviderId
+      openai.ts       # OpenAI-compat адаптер (GPT + opencode-go/DeepSeek через baseURL)
       anthropic.ts    # Claude
-      registry.ts     # фабрика провайдеров
-      index.ts
+      registry.ts     # ALL_PROVIDERS / PROVIDERS — фабрика провайдеров
+      index.ts        # createProvider() — выбор по config.provider
   state/
     store.ts          # zustand-стор сессии (UI + игровое состояние)
     reducer.ts        # чистые переходы состояния (тестируется)
@@ -50,7 +51,8 @@ src/
     Face.tsx          # лицо: муд, моргание, подёргивание
     faces.ts          # таблица черт → ASCII-арт по мудам
     DialoguePanel.tsx # история реплик + стрим
-    InputBox.tsx      # ввод игрока
+    InputBox.tsx      # ввод игрока + попап команд
+    CommandPopup.tsx  # попап /команд (навигация стрелками)
     CocktailAnimation.tsx
     Meter.tsx         # полоса опьянения
     Tab.tsx           # счёт
@@ -59,20 +61,26 @@ src/
     ProviderPicker.tsx
     ExitConfirm.tsx
     SelectList.tsx    # переиспользуемый список с навигацией
+    useViewport.ts    # хук размеров терминала (rows/columns + resize)
   data/
     cocktails.ts      # мини-БД коктейлей
   tests/
-    reducer.test.ts
+    bootstrap.test.ts
+    cocktails.test.ts
     drunkenness.test.ts
-    loop.test.ts
+    loop.test.ts      # мок-провайдеры для loop-тестов
+    providers.test.ts
+    reducer.test.ts
+    ui.test.tsx
+scripts/              # утилиты разработчика (запуск: npx tsx scripts/<name>.ts)
+  preview-faces.ts    # превью всех лиц по мудам + проверка ширины строк
+  smoke.ts            # дымовой прогон провайдера (system prompt + tool call)
+  smoke-turn.ts       # дымовой прогон полного хода через runTurn + стор
 docs/
-  SPEC.md             # основная спецификация
-  PLAN.md             # пошаговый план реализации (M0–M5)
-  BACKLOG.md          # идеи после v1
-  SPEC-reasoning.md   # спека: унификация reasoning-токенов
-  SPEC-ui.md          # спека: sticky-лицо + command popup
-  PLAN-screens.md     # план: экраны, выбор провайдера, /settings
+  BACKLOG.md          # идеи и техдолг (P1–P3 + T1–T4)
 ```
+
+> `docs/` сейчас содержит только `BACKLOG.md`. Спецификации (`SPEC*.md`) и планы (`PLAN*.md`) заводятся под фичу по правилам ниже — см. «Документация».
 
 ## Документация
 
@@ -86,7 +94,7 @@ docs/
 | `PLAN-*.md` | Пошаговый план реализации с задачами и критериями готовности | `PLAN-screens.md` |
 | `SPEC.md` | Основная спецификация проекта (всегда актуальная) | — |
 | `PLAN.md` | Основной план реализации | — |
-| `BACKLOG.md` | Идеи и техдолг | — |
+| `BACKLOG.md` | Идеи и техдолг | (существует) |
 
 ### Правила
 

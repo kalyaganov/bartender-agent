@@ -1,5 +1,5 @@
 {
-  "name": "homeagent",
+  "name": "bartender-agent",
   "version": "0.1.0",
   "description": "Бармен — AI character agent in TUI (TypeScript + Ink)",
   "type": "module",
