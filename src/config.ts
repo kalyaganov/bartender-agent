@@ -47,6 +47,7 @@ export const config = {
     blinkDurationMs: 120,
     typewriterDelayMs: 12,
     metabolismTickMs: 60_000,
+    fixedOverhead: 20,
   },
 
   reasoning: {

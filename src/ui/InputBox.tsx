@@ -1,20 +1,30 @@
-import { useState } from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 
 export function InputBox({
+  value,
+  onChange,
   onSubmit,
+  onCommandNav,
   disabled,
 }: {
+  value: string;
+  onChange: (v: string) => void;
   onSubmit: (text: string) => void;
+  onCommandNav?: (key: "up" | "down" | "tab") => void;
   disabled?: boolean;
 }) {
-  const [value, setValue] = useState("");
+  useInput((_input, key) => {
+    if (!value.startsWith("/")) return;
+    if (key.upArrow) onCommandNav?.("up");
+    else if (key.downArrow) onCommandNav?.("down");
+    else if (key.tab) onCommandNav?.("tab");
+  });
 
   const handleSubmit = (v: string) => {
     const trimmed = v.trim();
     if (trimmed) onSubmit(trimmed);
-    setValue("");
+    onChange("");
   };
 
   return (
@@ -22,7 +32,7 @@ export function InputBox({
       <Text color="green">Вы:&nbsp;</Text>
       <TextInput
         value={value}
-        onChange={setValue}
+        onChange={onChange}
         onSubmit={handleSubmit}
         placeholder={disabled ? "…" : "сказать бармену"}
       />

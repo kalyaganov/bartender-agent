@@ -5,14 +5,20 @@ export function DialoguePanel({
   lines,
   streaming,
   busy,
+  maxLines,
 }: {
   lines: Line[];
   streaming: string;
   busy: boolean;
+  maxLines: number;
 }) {
+  const hasIndicator = Boolean(streaming || busy);
+  const historyMax = Math.max(0, maxLines - (hasIndicator ? 1 : 0));
+  const visible = lines.slice(-historyMax);
+
   return (
-    <Box flexDirection="column" marginTop={1} minHeight={6}>
-      {lines.map((line, i) => {
+    <Box flexDirection="column" marginTop={1}>
+      {visible.map((line, i) => {
         switch (line.speaker) {
           case "user":
             return (

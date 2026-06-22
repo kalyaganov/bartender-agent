@@ -7,6 +7,24 @@ export const HELP =
   "/leave — попрощаться · /exit — выход (с подтверждением) · /state — состояние (debug). " +
   "ESC или Ctrl+C — подтверждение выхода. Это игра-симуляция, бармен вымышлен.";
 
+export interface CommandDef {
+  name: string;
+  label: string;
+}
+
+export const COMMANDS: CommandDef[] = [
+  { name: "/menu", label: "меню коктейлей" },
+  { name: "/settings", label: "настройки и провайдер" },
+  { name: "/help", label: "подсказка по командам" },
+  { name: "/leave", label: "попрощаться с барменом" },
+  { name: "/exit", label: "выход" },
+  { name: "/state", label: "состояние (debug)" },
+];
+
+export function matchCommands(query: string): CommandDef[] {
+  return COMMANDS.filter((c) => c.name.startsWith(query));
+}
+
 export function handleCommand(text: string): boolean {
   if (!text.startsWith("/")) return false;
   const store = useStore.getState();

@@ -1,19 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Box, useInput } from "ink";
 import { Face } from "./Face";
 import { DialoguePanel } from "./DialoguePanel";
 import { InputBox } from "./InputBox";
+import { CommandPopup } from "./CommandPopup";
 import { StatusBar } from "./StatusBar";
 import { Meter } from "./Meter";
 import { Tab } from "./Tab";
 import { CocktailAnimation } from "./CocktailAnimation";
+import { useViewport } from "./useViewport";
 import { useStore } from "../state/store";
 import { useAppStore } from "../state/app";
 import { runTurn } from "../agent/loop";
-import { handleCommand } from "../agent/commands";
+import { handleCommand, matchCommands } from "../agent/commands";
 import { config } from "../config";
 
+const FIXED_OVERHEAD = config.ui.fixedOverhead;
+
 export function BarScreen() {
+  const vp = useViewport();
   const mood = useStore((s) => s.mood);
   const lines = useStore((s) => s.lines);
   const streaming = useStore((s) => s.streamingText);
@@ -22,21 +27,58 @@ export function BarScreen() {
   const tab = useStore((s) => s.tab);
   const phase = useStore((s) => s.phase);
   const barTimeMin = useStore((s) => s.barTimeMin);
+  const pouring = useStore((s) => s.pouring);
   const tickMetabolism = useStore((s) => s.tickMetabolism);
+
+  const [inputValue, setInputValue] = useState("");
+  const [cmdIndex, setCmdIndex] = useState(0);
 
   useEffect(() => {
     const id = setInterval(tickMetabolism, config.ui.metabolismTickMs);
     return () => clearInterval(id);
   }, [tickMetabolism]);
 
+  const popupItems = inputValue.startsWith("/")
+    ? matchCommands(inputValue)
+    : [];
+
+  useEffect(() => {
+    setCmdIndex(0);
+  }, [inputValue]);
+
+  useEffect(() => {
+    if (cmdIndex > popupItems.length - 1) setCmdIndex(0);
+  }, [popupItems.length, cmdIndex]);
+
+  const overhead = FIXED_OVERHEAD + (pouring ? 1 : 0);
+  const dialogueMaxLines = Math.max(
+    2,
+    vp.rows - overhead - popupItems.length,
+  );
+
   useInput((_input, key) => {
     if (key.escape) {
-      useAppStore.getState().go("exit-confirm");
+      if (inputValue) {
+        setInputValue("");
+      } else {
+        useAppStore.getState().go("exit-confirm");
+      }
     }
   });
 
+  const handleCommandNav = (key: "up" | "down" | "tab") => {
+    if (popupItems.length === 0) return;
+    if (key === "up") {
+      setCmdIndex((i) => (i - 1 + popupItems.length) % popupItems.length);
+    } else if (key === "down") {
+      setCmdIndex((i) => (i + 1) % popupItems.length);
+    } else if (key === "tab") {
+      setInputValue(popupItems[cmdIndex].name);
+    }
+  };
+
   const handleSubmit = (text: string) => {
-    // Команды решают сами (например /exit работает даже во время стрима).
+    setInputValue("");
     if (handleCommand(text)) return;
     if (busy) return;
     void runTurn(text).catch(() => {});
@@ -61,7 +103,12 @@ export function BarScreen() {
         <Face mood={mood} />
       </Box>
 
-      <DialoguePanel lines={lines} streaming={streaming} busy={busy} />
+      <DialoguePanel
+        lines={lines}
+        streaming={streaming}
+        busy={busy}
+        maxLines={dialogueMaxLines}
+      />
 
       <CocktailAnimation />
 
@@ -71,7 +118,16 @@ export function BarScreen() {
       </Box>
 
       <Box marginTop={1} borderTop borderStyle="single" />
-      <InputBox onSubmit={handleSubmit} disabled={busy} />
+
+      <CommandPopup items={popupItems} selected={cmdIndex} />
+
+      <InputBox
+        value={inputValue}
+        onChange={setInputValue}
+        onSubmit={handleSubmit}
+        onCommandNav={handleCommandNav}
+        disabled={busy}
+      />
     </Box>
   );
 }
