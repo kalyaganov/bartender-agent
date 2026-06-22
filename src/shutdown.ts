@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { useStore } from "./state/store";
 import { cancelCurrentTurn } from "./agent/loop";
+import { exitAltScreen } from "./altScreen";
 
 function shutdownTsxWatchParent(): void {
   if (!process.ppid) return;
@@ -21,6 +22,7 @@ export function exitApp(): void {
   useStore.getState().addBartenderLine(
     "Удачи, дружище. И помни — домой всегда лучше на такси.",
   );
+  exitAltScreen();
   shutdownTsxWatchParent();
   setTimeout(() => process.exit(0), 100);
 }
