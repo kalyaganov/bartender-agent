@@ -50,7 +50,32 @@
  Вы: ▮
 ```
 
-## Быстрый старт
+## Установка
+
+```bash
+npm install -g bartender-agent
+bartender
+```
+
+Нужен Node ≥ 18. Конфиг — в `~/.bartender-agent/.env` (ниже). Ключи нигде не логируются и не уходят в prompt/history.
+
+```bash
+mkdir -p ~/.bartender-agent
+cat > ~/.bartender-agent/.env <<'EOF'
+# Провайдер и модель (опционально — иначе выбор при старте)
+BARTENDER_PROVIDER=opencode-go
+BARTENDER_MODEL=deepseek-v4-pro
+
+# Ключ хотя бы одного провайдера
+OPENCODE_GO_API_KEY=...
+# ANTHROPIC_API_KEY=...
+# OPENAI_API_KEY=...
+EOF
+```
+
+Переменные реального окружения (`export ...`) имеют приоритет над `.env` — удобно для CI/контейнеров.
+
+## Из исходников (для разработки)
 
 ```bash
 git clone https://github.com/kalyaganov/bartender-agent.git
@@ -60,7 +85,7 @@ cp .env.example .env   # вписать API-ключ хотя бы одного 
 npm run dev
 ```
 
-Нужен Node ≥ 18. Ключи лежат в `.env` (в `.gitignore`, нигде не логируются и не уходят в prompt/history).
+В дев-режиме env подгружается из CWD `.env` через `tsx --env-file=.env`.
 
 ### Провайдеры
 

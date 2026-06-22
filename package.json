@@ -1,17 +1,55 @@
 {
   "name": "bartender-agent",
   "version": "0.1.0",
-  "description": "Бармен — AI character agent in TUI (TypeScript + Ink)",
+  "description": "Бармен Виктор — AI character agent in TUI (TypeScript + Ink)",
   "type": "module",
-  "private": true,
+  "license": "MIT",
+  "author": "Alexey Kalyaganov <aa.kalyaganov@yandex.ru>",
+  "homepage": "https://github.com/kalyaganov/bartender-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kalyaganov/bartender-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kalyaganov/bartender-agent/issues"
+  },
+  "keywords": [
+    "cli",
+    "tui",
+    "ink",
+    "react",
+    "character-agent",
+    "ai",
+    "llm",
+    "roleplay",
+    "game",
+    "bartender",
+    "terminal"
+  ],
+  "main": "dist/index.js",
+  "bin": {
+    "bartender": "bin/bartender.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.tsx",
     "start": "tsx --env-file=.env src/index.tsx",
+    "build": "esbuild src/index.tsx --bundle --platform=node --format=esm --target=node18 --packages=external --jsx=automatic --outfile=dist/index.js --log-level=warning",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
+    "dotenv": "^17.4.2",
     "ink": "^5.2.1",
     "ink-text-input": "^6.0.0",
     "openai": "^6.44.0",
@@ -22,6 +60,7 @@
   "devDependencies": {
     "@types/node": "^26.0.0",
     "@types/react": "^18.3.31",
+    "esbuild": "^0.28.1",
     "ink-testing-library": "^4.0.0",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",

@@ -1,5 +1,10 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import dotenv from "dotenv";
 import { z } from "zod";
 import type { ProviderId } from "./agent/providers/types";
+
+dotenv.config({ path: join(homedir(), ".bartender-agent", ".env"), quiet: true });
 
 const EnvSchema = z.object({
   BARTENDER_PROVIDER: z
