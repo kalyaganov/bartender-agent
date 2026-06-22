@@ -79,9 +79,10 @@ export function BarScreen() {
 
   const handleSubmit = (text: string) => {
     setInputValue("");
-    if (handleCommand(text)) return;
+    const resolved = popupItems.length > 0 ? popupItems[cmdIndex].name : text;
+    if (handleCommand(resolved)) return;
     if (busy) return;
-    void runTurn(text).catch(() => {});
+    void runTurn(resolved).catch(() => {});
   };
 
   const phaseLabel =

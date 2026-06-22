@@ -1,10 +1,11 @@
 import { useStore } from "../state/store";
 import { useAppStore } from "../state/app";
 import { formatMenu } from "../data/cocktails";
+import { exitApp } from "../shutdown";
 
 export const HELP =
   "/menu — меню · /settings — настройки и провайдер · /help — подсказка · " +
-  "/leave — попрощаться · /exit — выход (с подтверждением) · /state — состояние (debug). " +
+  "/exit — выход · /state — состояние (debug). " +
   "ESC или Ctrl+C — подтверждение выхода. Это игра-симуляция, бармен вымышлен.";
 
 export interface CommandDef {
@@ -16,7 +17,6 @@ export const COMMANDS: CommandDef[] = [
   { name: "/menu", label: "меню коктейлей" },
   { name: "/settings", label: "настройки и провайдер" },
   { name: "/help", label: "подсказка по командам" },
-  { name: "/leave", label: "попрощаться с барменом" },
   { name: "/exit", label: "выход" },
   { name: "/state", label: "состояние (debug)" },
 ];
@@ -44,14 +44,8 @@ export function handleCommand(text: string): boolean {
       }
       useAppStore.getState().go("menu");
       return true;
-    case "/leave":
-      store.addBartenderLine(
-        "Береги себя, дружище. И заходи ещё, стойка всегда открыта.",
-      );
-      useStore.setState({ phase: "closed" });
-      return true;
     case "/exit":
-      useAppStore.getState().go("exit-confirm");
+      exitApp();
       return true;
     case "/state": {
       const r = store.lastReasoning;

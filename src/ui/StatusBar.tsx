@@ -15,6 +15,7 @@ export function StatusBar({
       <Text color="yellow" bold>
         BAR
       </Text>
+      <Text color="gray">[esc] выход из бара</Text>
       <Text color="gray">
         {time} · {phase}
       </Text>
