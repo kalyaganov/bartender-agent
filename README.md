@@ -22,7 +22,7 @@
 - **😏 Реактивное ASCII-лицо.** 10 настроений собираются из слотов черт (брови, глаза, рот, щёки, акцентный цвет). Моргание и подёргивание бровей — на `useState` + `setInterval`.
 - **🥃 Динамика опьянения.** Оценка из двух сигналов: как игрок **выглядит** по репликам (LLM) + сколько мы **насобирали** по выпитому с учётом метаболизма. Полоса опьянения и зоны поведения в реальном времени.
 - **🚕 Твёрдые пороги.** При `drunkenness ≥ 7` редюсер **форсирует** отказ, даже если модель согласилась налить. Уговоры «ещё одну» не проходят — это game rule, а не просьба персонажа.
-- **🔌 Провайдер-агностично.** Loop не знает, какой LLM за ним стоит. Контракт — `StreamEvent`. Поддерживаются Anthropic Claude, OpenAI/GPT и любой OpenAI-compatible эндпоинт (DeepSeek, локальные модели). BYOK — ключи пользователя, расходы на нём.
+- **🔌 Любой OpenAI-compat эндпоинт.** Loop не знает, какой LLM за ним стоит. Контракт — `StreamPart`. Один адаптер работает с любым совместимым API: opencode-go, OpenAI, DeepSeek, OpenRouter, локальные модели. BYOK — ключи пользователя, расходы на нём.
 - **🧪 Предсказуемая логика.** Переходы состояния — чистая функция (`state/reducer.ts`), покрытая юнит-тестами. Сайд-эффекты (анимации, таймеры) живут отдельно, поверх редюсера.
 
 ## Превью
@@ -83,53 +83,43 @@ npm update -g bartender-agent
 git clone https://github.com/kalyaganov/bartender-agent.git
 cd bartender-agent
 npm install
-cp .env.example .env   # вписать API-ключ хотя бы одного провайдера
 npm run dev
 ```
 
-В дев-режиме env подгружается из CWD `.env` через `tsx --env-file=.env`.
+При первом запуске откроется экран настройки — введи endpoint, token и модель (см. ниже).
 
 ## Конфигурация
 
-Нужен Node ≥ 18. Для всех способов запуска конфиг читается из `~/.bartender-agent/.env` (ключи нигде не логируются и не уходят в prompt/history):
+Нужен Node ≥ 18. Настройка хранится в `~/.bartender-agent/preferences.json` (плоская схема, ключ нигде не логируется и не уходит в prompt/history):
 
-```bash
-mkdir -p ~/.bartender-agent
-cat > ~/.bartender-agent/.env <<'EOF'
-# Провайдер и модель (опционально — иначе выбор при старте)
-BARTENDER_PROVIDER=opencode-go
-BARTENDER_MODEL=deepseek-v4-pro
-
-# Ключ хотя бы одного провайдера
-OPENCODE_GO_API_KEY=...
-# ANTHROPIC_API_KEY=...
-# OPENAI_API_KEY=...
-EOF
+```json
+{
+  "endpoint": "https://opencode.ai/zen/go/v1",
+  "token": "sk-…",
+  "model": "deepseek-v4-pro",
+  "thinking": true
+}
 ```
 
-Переменные реального окружения (`export ...`) имеют приоритет над `.env` — удобно для CI/контейнеров.
+| Поле | Описание |
+|---|---|
+| `endpoint` | OpenAI-compat базовый URL без суффикса `/chat/completions`. Примеры: `https://opencode.ai/zen/go/v1`, `https://api.openai.com/v1`, `https://api.deepseek.com/v1`. |
+| `token` | API-ключ. |
+| `model` | Идентификатор модели, который понимает эндпоинт (`deepseek-v4-pro`, `gpt-4o-mini`, `claude-3-5-haiku`, …). |
+| `thinking` | `true` → в запрос передаётся `reasoning: {budgetTokens}`. Для thinking-моделей (DeepSeek-reasoner, GLM-5.x, o-series) включай; для обычных — оставь `false`. |
 
-### Провайдеры
+### Удобная настройка
 
-| Id | Лейбл | Что нужно в `.env` |
-|---|---|---|
-| `opencode-go` | OpenCode Go (DeepSeek) — по умолчанию | `OPENCODE_GO_API_KEY` |
-| `anthropic` | Anthropic (Claude) | `ANTHROPIC_API_KEY` |
-| `openai` | OpenAI (GPT) | `OPENAI_API_KEY` |
+Запусти `/setup` в TUI — откроется форма из 4 полей с навигацией Tab/стрелками. То же доступно из `/settings` → «Настроить провайдера».
 
-Способы выбора (приоритет сверху):
-1. `BARTENDER_PROVIDER` в `.env` — поверх всего.
-2. Сохранённый выбор в `~/.bartender-agent/preferences.json` (после первого ручного выбора).
-3. **Экран выбора при старте** — если провайдер не выбран и настроено больше одного (или ни одного).
-4. Единственный настроенный провайдер выбирается автоматически.
-
-Сменить в рантайме: `/settings` → «Провайдер LLM». Текущая беседа сохраняется.
+Старый формат `preferences.json` с `credentials.custom.{apiKey, baseURL}` + `model` мигрируется автоматически при первом запуске. Другие легаси (`credentials.zai`, `credentials.minimax`, …) больше не поддерживаются — введи их заново через `/setup` как один endpoint.
 
 ## Команды и управление
 
 | Команда / клавиша | Действие |
 |---|---|
 | `/menu` | Меню коктейлей |
+| `/setup` | Настроить провайдера (endpoint, token, model, thinking) |
 | `/settings` | Настройки: сменить провайдера, перезапустить вечер, помощь, выход |
 | `/help` | Подсказка по командам + дисклеймер |
 | `/exit` | Выйти из бара (сразу, с прощальной репликой) |
@@ -146,7 +136,7 @@ src/
     loop.ts          execution loop: стрим + диспетчер tool_call
     prompt.ts        system prompt + state snapshot
     tools.ts         инструмент bartender_action (JSON-схема)
-    providers/       LLMProvider-контракт + адаптеры (anthropic, openai)
+    providers/       LLMProvider-контракт + OpenAI-compat адаптер (StreamPart)
   state/
     reducer.ts       чистые переходы состояния (тестируется)
     drunkenness.ts   displayDrunkenness + метаболизм
@@ -164,7 +154,7 @@ src/
 
 ## Стек
 
-TypeScript (strict) · Ink (React для CLI) · React 18 · zustand · zod · OpenAI-совместимый SDK · @anthropic-ai/sdk · vitest.
+TypeScript (strict) · Ink (React для CLI) · React 18 · zustand · zod · OpenAI-совместимый SDK · vitest.
 
 ## Скрипты
 

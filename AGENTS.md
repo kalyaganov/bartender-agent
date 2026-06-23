@@ -9,6 +9,7 @@ npm run dev        # запуск с hot-reload (tsx watch)
 npm start          # однократный запуск
 npm run typecheck  # tsc --noEmit — ОБЯЗАТЕЛЬНО перед коммитом
 npm test           # vitest — ОБЯЗАТЕЛЬНО после изменений логики
+npm run build      # esbuild — сборка dist/index.js для npm-пакета
 ```
 
 Перед завершением задачи запускай `npm run typecheck` и `npm test`. Не коммить, если что-то падает.
@@ -17,17 +18,18 @@ npm test           # vitest — ОБЯЗАТЕЛЬНО после изменен
 
 Терминальный AI character-агент: бармен **Виктор**. Ведёт диалог в образе, оценивает опьянение гостя, наливает коктейли, при высоком опьянении отказывает и вызывает такси. Лицо бармена (ASCII-арт) меняется от настроения.
 
-**Стек:** TypeScript (strict) · Ink (React для CLI) · zustand · zod · OpenAI-compatible SDK.
+**Стек:** TypeScript (strict) · Ink (React для CLI) · zustand · zod · OpenAI-совместимый SDK.
 
 ## Структура
 
 ```
 src/
   index.tsx           # точка входа (mount <App/>)
-  App.tsx             # роутер экранов: bar | selecting-provider | menu | exit-confirm
-  bootstrap.ts        # загрузка: восстановление пресетов, выбор провайдера
-  config.ts           # константы: пороги, таймеры, API-ключи из env
-  persistence.ts      # ~/.bartender-agent/preferences.json (+ миграция из ~/.homeagent/)
+  App.tsx             # роутер экранов: bar | setup | menu | exit-confirm
+  bootstrap.ts        # загрузка: loadPreferences → resolveInitialScreen (bar | setup)
+  config.ts           # константы: пороги, таймеры, generation, reasoning (без env API keys)
+  persistence.ts      # ~/.bartender-agent/preferences.json: {endpoint, token, model, thinking}
+                      # (+ мягкая миграция из легаси credentials.custom и старого каталога ~/.homeagent/)
   shutdown.ts         # exitApp(): отмена хода, прощальная реплика, остановка tsx watch
   agent/
     loop.ts           # execution loop: стрим + диспетчер tool_call
@@ -36,18 +38,19 @@ src/
     schemas.ts        # zod-схемы: Mood, Action, Drink, Drunkenness
     commands.ts       # обработка /команд + CommandDef/COMMANDS для попапа
     providers/
-      types.ts        # интерфейс LLMProvider, StreamEvent, ProviderId
-      openai.ts       # OpenAI-compat адаптер (GPT + opencode-go/DeepSeek через baseURL)
-      anthropic.ts    # Claude
-      registry.ts     # ALL_PROVIDERS / PROVIDERS — фабрика провайдеров
-      index.ts        # createProvider() — выбор по config.provider
+      types.ts        # контракт: LLMProvider, StreamPart, Message, ToolSpec, GenerationConfig
+      errors.ts       # ProviderError + toProviderError (классификация HTTP-статусов SDK)
+      provider-utils.ts # withSignal(promise, signal) → ProviderError(abort)
+      openai.ts       # единственный адаптер (OpenAI-compat: любой эндпоинт через baseURL)
+      index.ts        # createProvider(cfg: ProviderConfig) — собирает OpenAIProvider
   state/
     store.ts          # zustand-стор сессии (UI + игровое состояние)
     reducer.ts        # чистые переходы состояния (тестируется)
     drunkenness.ts    # формула displayDrunkenness, метаболизм
-    app.ts            # zustand app-store (экран, провайдер — не сбрасывается)
+    app.ts            # zustand app-store: {screen, prefs} — не сбрасывается между сессиями
   ui/
     BarScreen.tsx     # основной экран
+    SetupScreen.tsx   # форма настройки: endpoint, token, model, thinking on/off
     Face.tsx          # лицо: муд, моргание, подёргивание
     faces.ts          # таблица черт → ASCII-арт по мудам
     DialoguePanel.tsx # история реплик + стрим
@@ -57,8 +60,7 @@ src/
     Meter.tsx         # полоса опьянения
     Tab.tsx           # счёт
     StatusBar.tsx     # время бара, фаза
-    SettingsMenu.tsx  # /settings
-    ProviderPicker.tsx
+    SettingsMenu.tsx  # /settings (пункт «Настроить провайдера» открывает SetupScreen)
     ExitConfirm.tsx
     SelectList.tsx    # переиспользуемый список с навигацией
     useViewport.ts    # хук размеров терминала (rows/columns + resize)
@@ -68,19 +70,26 @@ src/
     bootstrap.test.ts
     cocktails.test.ts
     drunkenness.test.ts
-    loop.test.ts      # мок-провайдеры для loop-тестов
-    providers.test.ts
+    errors.test.ts
+    loop.test.ts        # мок-провайдеры для loop-тестов
+    persistence.test.ts # round-trip + миграция легаси
+    provider-utils.test.ts
+    providers.test.ts   # OpenAIProvider: стриминг, tool-calls, baseURL, tool_choice, createProvider(cfg)
     reducer.test.ts
     ui.test.tsx
+    ui-setup.test.tsx   # форма SetupScreen
 scripts/              # утилиты разработчика (запуск: npx tsx scripts/<name>.ts)
   preview-faces.ts    # превью всех лиц по мудам + проверка ширины строк
-  smoke.ts            # дымовой прогон провайдера (system prompt + tool call)
+  smoke.ts            # дымовой прогон: system prompt + tool call (TUI-настройка должна быть готова)
   smoke-turn.ts       # дымовой прогон полного хода через runTurn + стор
 docs/
-  BACKLOG.md          # идеи и техдолг (P1–P3 + T1–T4)
+  BACKLOG.md            # идеи и техдолг (P1–P3 + T1–T4)
+  SPEC-primitive-setup.md # актуальная архитектура провайдеров (одна форма, ProviderConfig)
+  SPEC-provider-layer.md  # ⚠ superseded частично — исторический контракт StreamPart (актуален)
+  SPEC-providers.md       # ⚠ superseded by SPEC-primitive-setup.md
+  SPEC-publish.md         # ⚠ частично устарел (env-config)
+  PLAN-provider-layer.md  # план реализации предыдущей итерации
 ```
-
-> `docs/` сейчас содержит только `BACKLOG.md`. Спецификации (`SPEC*.md`) и планы (`PLAN*.md`) заводятся под фичу по правилам ниже — см. «Документация».
 
 ## Документация
 
@@ -90,27 +99,26 @@ docs/
 
 | Префикс | Назначение | Пример |
 |---------|-----------|--------|
-| `SPEC-*.md` | Спецификация изменения: проблема, дизайн, затронутые файлы, тесты | `SPEC-reasoning.md` |
-| `PLAN-*.md` | Пошаговый план реализации с задачами и критериями готовности | `PLAN-screens.md` |
-| `SPEC.md` | Основная спецификация проекта (всегда актуальная) | — |
-| `PLAN.md` | Основной план реализации | — |
+| `SPEC-*.md` | Спецификация изменения: проблема, дизайн, затронутые файлы, тесты | `SPEC-primitive-setup.md` |
+| `PLAN-*.md` | Пошаговый план реализации с задачами и критериями готовности | `PLAN-provider-layer.md` |
 | `BACKLOG.md` | Идеи и техдолг | (существует) |
 
 ### Правила
 
 1. **Перед реализацией фичи** — создать `docs/SPEC-<feature>.md`: проблема, текущее состояние (с `file:line`), дизайн, затронутые файлы, тесты, оценка усилия.
-2. **Кросс-ссылки** — относительные пути внутри `docs/` (`./SPEC.md`). Из корня — `./docs/SPEC.md`.
-3. **Обновлять существующие спеки** при изменении архитектуры, а не только создавать новые.
+2. **Кросс-ссылки** — относительные пути внутри `docs/` (`./SPEC-primitive-setup.md`). Из корня — `./docs/SPEC-primitive-setup.md`.
+3. **Superseded-пометки** — если новая SPEC делает старую устаревшей, оставь старую (история), но добавь в шапку «⚠ superseded by …».
 
 ## Конвенции кода
 
 - **Без комментариев** в коде, если явно не requested.
 - **Русский язык** для всего, что видит/слышит пользователь: реплики бармена, system prompt, системные сообщения, меню, команды. Английский — для идентификаторов, технических комментариев в тестах, логов.
 - **Строго в образе**: бармен никогда не упоминает, что он ИИ. Это правило — в system prompt (`agent/prompt.ts`), не нарушать.
-- **Zustand**: два стора — `store.ts` (сессионное состояние, сбрасывается) и `app.ts` (прикладное состояние, не сбрасывается).
+- **Zustand**: два стора — `store.ts` (сессионное состояние, сбрасывается) и `app.ts` (прикладное состояние `{screen, prefs}`, не сбрасывается).
 - **Reducer чистый**: `state/reducer.ts` — чистая функция, тестируется отдельно. Сайд-эффекты (анимации, таймеры) — в `store.ts` поверх редюсера.
-- **Провайдер-агностичность**: loop не знает, какой провайдер/модель. Контракт — `StreamEvent` в `providers/types.ts`. Новые провайдеры добавляются в `registry.ts`.
-- **Tool calling**: модель обязана вызывать `bartender_action` каждый ход. Реплика — в поле `reply` внутри tool call (для reasoning-моделей) ИЛИ в content-стриме (для обычных). Loop обрабатывает оба случая.
+- **Один OpenAI-compat адаптер**: loop не знает, какой эндпоинт за ним стоит. Контракт — `StreamPart` в `providers/types.ts`. Конфигурация — плоская схема в `preferences.json`, читается через `useAppStore.prefs`. Никаких каталогов провайдеров и env-var override.
+- **Tool calling**: модель обязана вызывать `bartender_action` каждый ход. System prompt это предписывает; программно `tool_choice` не форсируется — провайдеры расходятся в поддержке (ZAI режектит named, DeepSeek-thinking режектит `required`). Реплика — в поле `reply` внутри tool call (для reasoning-моделей) ИЛИ в content-стриме (для обычных). Loop обрабатывает оба случая.
+- **Reasoning**: если в `prefs.thinking === true`, loop передаёт `generation.reasoning = {budgetTokens}`. Что делать с `reasoning_content` из стрима — решает адаптер (`reasoning-delta` события в `store.lastReasoning`, в UI не показывается, доступно через `/state`).
 - **Тесты**: vitest, рядом с тестируемым кодом в `src/tests/`. Мок-провайдеры для loop-тестов — в `tests/loop.test.ts`.
 - **Строгий TypeScript**: `strict`, `noUnusedLocals`, `noUnusedParameters`. Не ослаблять.
 
