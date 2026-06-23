@@ -1,88 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { resolveInitialProvider } from "../bootstrap";
-import { ALL_PROVIDERS, PROVIDERS, getProviderDef } from "../agent/providers/registry";
-import type { ProviderId } from "../agent/providers/types";
+import { resolveInitialScreen } from "../bootstrap";
+import type { Preferences } from "../persistence";
 
-const ALL: ProviderId[] = ["anthropic", "openai", "opencode-go"];
-
-describe("resolveInitialProvider (SPEC §3.1)", () => {
-  it("env BARTENDER_PROVIDER выигрывает над prefs", () => {
-    const d = resolveInitialProvider({
-      envProvider: "anthropic",
-      envModel: "claude-x",
-      prefs: { provider: "openai" },
-      configured: ALL,
-    });
-    expect(d.providerId).toBe("anthropic");
-    expect(d.model).toBe("claude-x");
-    expect(d.goToPicker).toBe(false);
+describe("resolveInitialScreen (SPEC primitive-setup §4.8)", () => {
+  it("настроено → bar", () => {
+    const prefs: Preferences = {
+      endpoint: "https://opencode.ai/zen/go/v1",
+      token: "sk",
+      model: "deepseek-v4-pro",
+    };
+    expect(resolveInitialScreen(prefs)).toBe("bar");
   });
 
-  it("prefs используются, если нет env", () => {
-    const d = resolveInitialProvider({
-      prefs: { provider: "openai", model: "gpt-yy" },
-      configured: ALL,
-    });
-    expect(d.providerId).toBe("openai");
-    expect(d.model).toBe("gpt-yy");
-    expect(d.goToPicker).toBe(false);
+  it("нет endpoint → setup", () => {
+    expect(resolveInitialScreen({ token: "sk", model: "m" })).toBe("setup");
   });
 
-  it("единственный настроенный → авто-выбор, пикер пропускается", () => {
-    const d = resolveInitialProvider({ configured: ["opencode-go"] });
-    expect(d.providerId).toBe("opencode-go");
-    expect(d.goToPicker).toBe(false);
+  it("нет token → setup", () => {
+    expect(resolveInitialScreen({ endpoint: "x", model: "m" })).toBe("setup");
   });
 
-  it("несколько настроенных и нет выбора → пикер", () => {
-    const d = resolveInitialProvider({ configured: ALL });
-    expect(d.providerId).toBeNull();
-    expect(d.goToPicker).toBe(true);
+  it("нет model → setup", () => {
+    expect(resolveInitialScreen({ endpoint: "x", token: "y" })).toBe("setup");
   });
 
-  it("ноль настроенных → пикер (экран-инструкция)", () => {
-    const d = resolveInitialProvider({ configured: [] });
-    expect(d.providerId).toBeNull();
-    expect(d.goToPicker).toBe(true);
+  it("пустые prefs → setup", () => {
+    expect(resolveInitialScreen({})).toBe("setup");
   });
 
-  it("env провайдер не настроен (нет ключа) → fallback к prefs", () => {
-    const d = resolveInitialProvider({
-      envProvider: "anthropic",
-      prefs: { provider: "openai" },
-      configured: ["openai", "opencode-go"],
-    });
-    expect(d.providerId).toBe("openai");
-    expect(d.goToPicker).toBe(false);
-  });
-
-  it("prefs провайдер не настроен → fallback к single/picker", () => {
-    const d = resolveInitialProvider({
-      prefs: { provider: "anthropic" },
-      configured: ["openai", "opencode-go"],
-    });
-    expect(d.providerId).toBeNull();
-    expect(d.goToPicker).toBe(true);
-  });
-});
-
-describe("provider registry", () => {
-  it("ALL_PROVIDERS содержит все три id", () => {
-    expect(ALL_PROVIDERS.map((p) => p.id).sort()).toEqual(
-      ["anthropic", "openai", "opencode-go"].sort(),
-    );
-  });
-
-  it("getProviderDef находит каждый id", () => {
-    for (const id of ALL) expect(getProviderDef(id)?.id).toBe(id);
-  });
-
-  it("PROVIDERS — подмножество ALL и только configured", () => {
-    expect(PROVIDERS.length).toBeLessThanOrEqual(ALL_PROVIDERS.length);
-    for (const p of PROVIDERS) expect(p.configured).toBe(true);
-  });
-
-  it("у каждого провайдера есть defaultModel", () => {
-    for (const p of ALL_PROVIDERS) expect(p.defaultModel.length).toBeGreaterThan(0);
+  it("thinking=true не влияет на configured", () => {
+    expect(
+      resolveInitialScreen({
+        endpoint: "x",
+        token: "y",
+        model: "z",
+        thinking: true,
+      }),
+    ).toBe("bar");
   });
 });

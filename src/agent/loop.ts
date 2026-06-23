@@ -3,17 +3,22 @@ import { useStore, selectHistory } from "../state/store";
 import { useAppStore } from "../state/app";
 import { buildSystemPrompt } from "./prompt";
 import { createProvider, type LLMProvider } from "./providers";
+import type { GenerationConfig } from "./providers/types";
+import { toProviderError } from "./providers/errors";
 import { BARTENDER_TOOL, parseBartenderAction } from "./tools";
-
-let cached: { version: number; provider: LLMProvider } | null = null;
+import { isConfigured } from "../persistence";
 
 function getProvider(): LLMProvider {
-  const { providerId, model, providerVersion } = useAppStore.getState();
-  if (!providerId) throw new Error("Провайдер LLM не выбран.");
-  if (cached && cached.version === providerVersion) return cached.provider;
-  const provider = createProvider(providerId, model);
-  cached = { version: providerVersion, provider };
-  return provider;
+  const { prefs } = useAppStore.getState();
+  if (!isConfigured(prefs)) {
+    throw new Error("Провайдер не настроен. Команда /setup — ввести endpoint, token, модель.");
+  }
+  return createProvider({
+    endpoint: prefs.endpoint!,
+    token: prefs.token!,
+    model: prefs.model!,
+    thinking: prefs.thinking ?? false,
+  });
 }
 
 /** Текущий контроллер хода — чтобы можно было прервать стрим извне (выход). */
@@ -35,29 +40,27 @@ async function withRetry<T>(
   onRetry?: () => void,
 ): Promise<void> {
   const { retryAttempts, retryBackoffMs, providerTimeoutMs } = config.loop;
-  let lastError: unknown;
   for (let attempt = 0; attempt <= retryAttempts; attempt++) {
     const controller = new AbortController();
     currentController = controller;
-    const timer = setTimeout(
-      () => controller.abort(),
-      providerTimeoutMs,
-    );
+    const timer = setTimeout(() => controller.abort(), providerTimeoutMs);
     try {
       for await (const item of fn(controller.signal)) onItem(item);
       return;
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw err;
-      lastError = err;
+      const pe = toProviderError(err);
+      if (!pe.retryable) throw pe;
       if (attempt < retryAttempts) {
         if (onRetry) onRetry();
-        await new Promise((r) => setTimeout(r, retryBackoffMs * (attempt + 1)));
+        const backoff = pe.retryAfterMs ?? retryBackoffMs * (attempt + 1);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
       }
+      throw pe;
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastError;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -99,6 +102,14 @@ export async function executeTurn(
   });
   let toolInput: unknown = null;
 
+  const generation: GenerationConfig = {
+    temperature: config.generation.temperature,
+    maxOutputTokens: config.generation.maxOutputTokens,
+    ...(useAppStore.getState().prefs.thinking
+      ? { reasoning: { budgetTokens: config.reasoning.budgetTokens } }
+      : {}),
+  };
+
   try {
     await withRetry(
       (signal) =>
@@ -106,12 +117,15 @@ export async function executeTurn(
           system,
           messages,
           tools: [BARTENDER_TOOL],
+          generation,
           signal,
         }),
       (ev) => {
-        if (ev.type === "token") store.appendStreamingToken(ev.text);
-        else if (ev.type === "reasoning") store.appendReasoning(ev.text);
-        else if (ev.type === "toolCall") toolInput = ev.input;
+        if (ev.type === "text-delta") store.appendStreamingToken(ev.text);
+        else if (ev.type === "reasoning-delta") store.appendReasoning(ev.text);
+        else if (ev.type === "tool-call") toolInput = ev.args;
+        else if (ev.type === "finish") store.recordUsage(ev.usage);
+        else if (ev.type === "error") throw ev.error;
       },
       () => store.startStreaming(),
     );

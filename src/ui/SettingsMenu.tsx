@@ -3,13 +3,12 @@ import { Box, Text, useInput } from "ink";
 import { SelectList, type SelectItem } from "./SelectList";
 import { useAppStore } from "../state/app";
 import { useStore } from "../state/store";
-import { getProviderDef } from "../agent/providers/registry";
 import { HELP } from "../agent/commands";
 
 export function SettingsMenu() {
   const go = useAppStore((s) => s.go);
   const back = useAppStore((s) => s.back);
-  const providerId = useAppStore((s) => s.providerId);
+  const prefs = useAppStore((s) => s.prefs);
   const [notice, setNotice] = useState<string | null>(null);
 
   useInput((_input, key) => {
@@ -19,9 +18,12 @@ export function SettingsMenu() {
     }
   });
 
-  const def = providerId ? getProviderDef(providerId) : undefined;
+  const setupHint = prefs.model
+    ? `${prefs.endpoint ?? "?"} · ${prefs.model}${prefs.thinking ? " · thinking" : ""}`
+    : "не настроен";
+
   const items: SelectItem[] = [
-    { key: "provider", label: "Провайдер LLM", hint: def?.label ?? "—" },
+    { key: "setup", label: "Настроить провайдера", hint: setupHint },
     { key: "restart", label: "Перезапустить вечер" },
     { key: "help", label: "Помощь" },
     { key: "exit", label: "Выйти" },
@@ -38,9 +40,9 @@ export function SettingsMenu() {
           items={items}
           onSelect={(key) => {
             switch (key) {
-              case "provider":
+              case "setup":
                 setNotice(null);
-                go("selecting-provider");
+                go("setup");
                 break;
               case "restart":
                 useStore.getState().reset();
@@ -69,4 +71,3 @@ export function SettingsMenu() {
     </Box>
   );
 }
-

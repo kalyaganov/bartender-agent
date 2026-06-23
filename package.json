@@ -1,6 +1,6 @@
 {
   "name": "bartender-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Бармен Виктор — AI character agent in TUI (TypeScript + Ink)",
   "type": "module",
   "license": "MIT",
@@ -40,16 +40,14 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/index.tsx",
-    "start": "tsx --env-file=.env src/index.tsx",
+    "dev": "tsx watch src/index.tsx",
+    "start": "tsx src/index.tsx",
     "build": "esbuild src/index.tsx --bundle --platform=node --format=esm --target=node18 --packages=external --jsx=automatic --outfile=dist/index.js --log-level=warning",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
-    "dotenv": "^17.4.2",
     "ink": "^5.2.1",
     "ink-text-input": "^6.0.0",
     "openai": "^6.44.0",

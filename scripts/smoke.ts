@@ -1,11 +1,21 @@
 import { createProvider } from "../src/agent/providers";
 import { BARTENDER_TOOL, parseBartenderAction } from "../src/agent/tools";
 import { BARTENDER_SYSTEM_PROMPT } from "../src/agent/prompt";
-import { config } from "../src/config";
+import { loadPreferences, isConfigured } from "../src/persistence";
 
 async function main() {
-  const provider = createProvider();
-  console.log(`provider=${config.provider} model=${config.model}\n`);
+  const prefs = await loadPreferences();
+  if (!isConfigured(prefs)) {
+    console.error("[smoke] Провайдер не настроен. Запусти /setup в TUI.");
+    process.exit(1);
+  }
+  const provider = createProvider({
+    endpoint: prefs.endpoint!,
+    token: prefs.token!,
+    model: prefs.model!,
+    thinking: prefs.thinking ?? false,
+  });
+  console.log(`endpoint=${prefs.endpoint} model=${prefs.model} thinking=${prefs.thinking ?? false}\n`);
 
   let text = "";
   let toolInput: unknown = null;
@@ -17,11 +27,15 @@ async function main() {
     ],
     tools: [BARTENDER_TOOL],
   })) {
-    if (ev.type === "token") {
+    if (ev.type === "text-delta") {
       process.stdout.write(ev.text);
       text += ev.text;
-    } else if (ev.type === "toolCall") {
-      toolInput = ev.input;
+    } else if (ev.type === "reasoning-delta") {
+      process.stderr.write(`\n[reasoning] ${ev.text}`);
+    } else if (ev.type === "tool-call") {
+      toolInput = ev.args;
+    } else if (ev.type === "finish") {
+      console.log(`\n[finish] reason=${ev.finishReason} usage=${JSON.stringify(ev.usage ?? {})}`);
     }
   }
 

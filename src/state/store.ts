@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Mood } from "../agent/schemas";
 import type { BartenderAction } from "../agent/schemas";
-import type { Message } from "../agent/providers/types";
+import type { Message, Usage } from "../agent/providers/types";
 import { config } from "../config";
 import {
   applyAction,
@@ -22,6 +22,7 @@ interface SessionState extends GameState {
   lines: Line[];
   streamingText: string;
   lastReasoning: string;
+  lastUsage?: Usage;
   busy: boolean;
   barTimeMin: number;
   pouring: string | null;
@@ -37,6 +38,7 @@ interface SessionState extends GameState {
   startStreaming: () => void;
   appendStreamingToken: (token: string) => void;
   appendReasoning: (token: string) => void;
+  recordUsage: (usage: Usage | undefined) => void;
   finalizeStreaming: () => void;
   setBusy: (busy: boolean) => void;
 
@@ -102,6 +104,7 @@ export const useStore = create<SessionState>((set) => ({
     set((s) => ({ streamingText: s.streamingText + token })),
   appendReasoning: (token) =>
     set((s) => ({ lastReasoning: s.lastReasoning + token })),
+  recordUsage: (usage) => set({ lastUsage: usage }),
   finalizeStreaming: () =>
     set((s) => {
       const text = s.streamingText.trim();
@@ -128,10 +131,11 @@ export const useStore = create<SessionState>((set) => ({
 export function selectHistory(state: SessionState): Message[] {
   return state.lines
     .filter((l) => l.speaker === "user" || l.speaker === "bartender")
-    .map((l) => ({
-      role: l.speaker === "user" ? ("user" as const) : ("assistant" as const),
-      content: l.text,
-    }));
+    .map((l): Message =>
+    l.speaker === "user"
+      ? { role: "user", content: l.text }
+      : { role: "assistant", content: [{ type: "text", text: l.text }] },
+  );
 }
 
 export type { Serving };

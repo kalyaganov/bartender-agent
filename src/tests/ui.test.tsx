@@ -50,16 +50,24 @@ describe("DialoguePanel (SPEC-ui T1)", () => {
 });
 
 describe("matchCommands (SPEC-ui T2)", () => {
-  it("находит команды по префиксу /s (settings + state)", () => {
+  it("находит /setup по префиксу /s", () => {
     expect(matchCommands("/s")).toEqual([
-      { name: "/settings", label: "настройки и провайдер" },
+      { name: "/setup", label: "настроить провайдера" },
+      { name: "/settings", label: "настройки" },
       { name: "/state", label: "состояние (debug)" },
     ]);
   });
 
-  it("фильтрует строго по префиксу: /se → только /settings", () => {
+  it("фильтрует строго по префиксу: /se → /setup + /settings", () => {
     expect(matchCommands("/se")).toEqual([
-      { name: "/settings", label: "настройки и провайдер" },
+      { name: "/setup", label: "настроить провайдера" },
+      { name: "/settings", label: "настройки" },
+    ]);
+  });
+
+  it("находит /setup по префиксу /setup", () => {
+    expect(matchCommands("/setup")).toEqual([
+      { name: "/setup", label: "настроить провайдера" },
     ]);
   });
 

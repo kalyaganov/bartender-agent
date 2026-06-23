@@ -2,34 +2,74 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useStore, selectHistory } from "../state/store";
 import { executeTurn } from "../agent/loop";
 import { handleCommand } from "../agent/commands";
-import type { LLMProvider, StreamEvent } from "../agent/providers/types";
+import { ProviderError } from "../agent/providers/errors";
+import type {
+  GenerationConfig,
+  LLMProvider,
+  StreamPart,
+  StreamTurnOptions,
+} from "../agent/providers/types";
+
+function makeProvider(gen: () => AsyncIterable<StreamPart>): LLMProvider {
+  return {
+    provider: "mock",
+    modelId: "mock-model",
+    capabilities: { supportsTools: true, supportsReasoning: false },
+    streamTurn: () => gen(),
+  };
+}
+
+function optsCapturingProvider(
+  gen: (opts: StreamTurnOptions) => AsyncIterable<StreamPart>,
+  caps = { supportsTools: true, supportsReasoning: false },
+): { provider: LLMProvider; lastOpts: () => StreamTurnOptions } {
+  let lastOpts: StreamTurnOptions;
+  return {
+    provider: {
+      provider: "mock",
+      modelId: "mock-model",
+      capabilities: caps,
+      streamTurn: (opts) => {
+        lastOpts = opts;
+        return gen(opts);
+      },
+    },
+    lastOpts: () => lastOpts,
+  };
+}
 
 function mockProvider(tokens: string[], opts?: { throwError?: Error }): LLMProvider {
-  async function* gen(): AsyncIterable<StreamEvent> {
+  return makeProvider(async function* (): AsyncIterable<StreamPart> {
     if (opts?.throwError) throw opts.throwError;
-    for (const t of tokens) yield { type: "token", text: t };
-    yield { type: "done" };
-  }
-  return { streamTurn: () => gen() };
+    for (const t of tokens) yield { type: "text-delta", text: t };
+    yield { type: "finish", finishReason: "stop" };
+  });
 }
 
-/** Мок, эмиттящий tool_call (имитация reasoning-модели: content пуст, есть reply). */
+function mockProviderWithUsage(tokens: string[]): LLMProvider {
+  return makeProvider(async function* (): AsyncIterable<StreamPart> {
+    for (const t of tokens) yield { type: "text-delta", text: t };
+    yield {
+      type: "finish",
+      finishReason: "stop",
+      usage: { inputTokens: 10, outputTokens: 20 },
+    };
+  });
+}
+
 function toolProvider(input: unknown): LLMProvider {
-  async function* gen(): AsyncIterable<StreamEvent> {
-    yield { type: "toolCall", toolName: "bartender_action", input };
-    yield { type: "done" };
-  }
-  return { streamTurn: () => gen() };
+  return makeProvider(async function* (): AsyncIterable<StreamPart> {
+    yield { type: "tool-call", toolCallId: "c1", toolName: "bartender_action", args: input };
+    yield { type: "finish", finishReason: "tool-calls" };
+  });
 }
 
-/** Мок reasoning-модели: сначала мышление, затем tool_call (имитация DeepSeek). */
 function reasoningProvider(reasoning: string[], input: unknown): LLMProvider {
-  async function* gen(): AsyncIterable<StreamEvent> {
-    for (const r of reasoning) yield { type: "reasoning", text: r };
-    yield { type: "toolCall", toolName: "bartender_action", input };
-    yield { type: "done" };
-  }
-  return { streamTurn: () => gen() };
+  return makeProvider(async function* (): AsyncIterable<StreamPart> {
+    for (const r of reasoning) yield { type: "reasoning-delta", text: r };
+    yield { type: "tool-call", toolCallId: "c1", toolName: "bartender_action", args: input };
+    yield { type: "finish", finishReason: "tool-calls" };
+  });
 }
 
 describe("agent loop (M1)", () => {
@@ -48,6 +88,12 @@ describe("agent loop (M1)", () => {
     const bartenderLines = state.lines.filter((l) => l.speaker === "bartender");
     const last = bartenderLines[bartenderLines.length - 1];
     expect(last.text).toBe("Привет, дружище!");
+  });
+
+  it("записывает usage из finish-события", async () => {
+    const p = mockProviderWithUsage(["ок"]);
+    await executeTurn(p, "привет");
+    expect(useStore.getState().lastUsage).toEqual({ inputTokens: 10, outputTokens: 20 });
   });
 
   it("добавляет реплику пользователя в историю для LLM", async () => {
@@ -176,5 +222,109 @@ describe("agent loop (M1)", () => {
     const sysLine = [...state.lines].reverse().find((l) => l.speaker === "system");
     expect(sysLine?.text).toContain("reasoning:");
     expect(sysLine?.text).toContain("оцениваю гостя...");
+  });
+});
+
+describe("executeTurn — tool choice (Фаза 3)", () => {
+  beforeEach(() => {
+    useStore.getState().reset();
+  });
+
+  it("не форсирует tool_choice: providers расходятся во поддержке (ZAI режектит named, DeepSeek-thinking режектит required). System prompt обязывает модель вызывать bartender_action каждый ход.", async () => {
+    const { provider, lastOpts } = optsCapturingProvider(async function* () {
+      yield { type: "text-delta", text: "ок" };
+      yield { type: "finish", finishReason: "stop" };
+    });
+    await executeTurn(provider, "привет");
+    expect(lastOpts().toolChoice).toBeUndefined();
+  });
+});
+
+describe("executeTurn — generation gating (Фаза 3)", () => {
+  beforeEach(() => {
+    useStore.getState().reset();
+  });
+
+  it("не включает reasoning для модели без canReason", async () => {
+    const { provider, lastOpts } = optsCapturingProvider(async function* () {
+      yield { type: "text-delta", text: "ок" };
+      yield { type: "finish", finishReason: "stop" };
+    });
+    await executeTurn(provider, "привет");
+    const gen = lastOpts().generation as GenerationConfig;
+    expect(gen.reasoning).toBeUndefined();
+    expect(gen.temperature).toBe(0.8);
+  });
+});
+
+describe("executeTurn — умный retry (Фаза 3)", () => {
+  beforeEach(() => {
+    useStore.getState().reset();
+  });
+
+  it("auth-ошибка не ретраится (1 вызов)", async () => {
+    let calls = 0;
+    const p: LLMProvider = {
+      provider: "mock",
+      modelId: "m",
+      capabilities: { supportsTools: true, supportsReasoning: false },
+      streamTurn: async function* () {
+        calls++;
+        throw new ProviderError("Ошибка аутентификации (401)", "auth", false);
+      },
+    };
+    await expect(executeTurn(p, "привет")).rejects.toThrow(/аутентификации/);
+    expect(calls).toBe(1);
+  });
+
+  it("badRequest не ретраится", async () => {
+    let calls = 0;
+    const p: LLMProvider = {
+      provider: "mock",
+      modelId: "m",
+      capabilities: { supportsTools: true, supportsReasoning: false },
+      streamTurn: async function* () {
+        calls++;
+        throw new ProviderError("Некорректный запрос (400)", "badRequest", false);
+      },
+    };
+    await expect(executeTurn(p, "привет")).rejects.toThrow(/запрос/);
+    expect(calls).toBe(1);
+  });
+
+  it("rateLimit ретраится и затем успех (уважает retryAfterMs)", async () => {
+    let calls = 0;
+    const p: LLMProvider = {
+      provider: "mock",
+      modelId: "m",
+      capabilities: { supportsTools: true, supportsReasoning: false },
+      streamTurn: async function* () {
+        calls++;
+        if (calls === 1) {
+          throw new ProviderError("Превышен лимит запросов", "rateLimit", true, 1);
+        }
+        yield { type: "text-delta", text: "ок" };
+        yield { type: "finish", finishReason: "stop" };
+      },
+    };
+    await executeTurn(p, "привет");
+    expect(calls).toBe(2);
+    const last = [...useStore.getState().lines].reverse().find((l) => l.speaker === "bartender");
+    expect(last?.text).toBe("ок");
+  });
+
+  it("network ретраится до лимита попыток", async () => {
+    let calls = 0;
+    const p: LLMProvider = {
+      provider: "mock",
+      modelId: "m",
+      capabilities: { supportsTools: true, supportsReasoning: false },
+      streamTurn: async function* () {
+        calls++;
+        throw new ProviderError("ECONNRESET", "network", true);
+      },
+    };
+    await expect(executeTurn(p, "привет")).rejects.toThrow(/ECONNRESET|сетев/);
+    expect(calls).toBeGreaterThan(1);
   });
 });

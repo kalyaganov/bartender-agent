@@ -1,10 +1,24 @@
-import type { LLMProvider, ProviderId } from "./types";
-import { getProviderDef } from "./registry";
+import { OpenAIProvider } from "./openai";
+import type { LLMProvider, ProviderCapabilities } from "./types";
 
-export function createProvider(id: ProviderId, model?: string): LLMProvider {
-  const def = getProviderDef(id);
-  if (!def) throw new Error(`Неизвестный провайдер: ${id}`);
-  return def.build(model);
+export interface ProviderConfig {
+  endpoint: string;
+  token: string;
+  model: string;
+  thinking: boolean;
 }
 
-export type { LLMProvider, ProviderId } from "./types";
+export function createProvider(cfg: ProviderConfig): LLMProvider {
+  const capabilities: ProviderCapabilities = {
+    supportsTools: true,
+    supportsReasoning: cfg.thinking,
+  };
+  return new OpenAIProvider({
+    apiKey: cfg.token,
+    model: cfg.model,
+    baseURL: cfg.endpoint,
+    capabilities,
+  });
+}
+
+export type { LLMProvider } from "./types";
