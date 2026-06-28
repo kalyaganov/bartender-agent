@@ -8,7 +8,7 @@ export const config = {
 
   loop: {
     maxTurnsPerSession: 120,
-    providerTimeoutMs: 30_000,
+    providerTimeoutMs: 90_000,
     retryAttempts: 2,
     retryBackoffMs: 800,
   },
@@ -23,11 +23,11 @@ export const config = {
 
   generation: {
     temperature: 0.8 as number,
-    maxOutputTokens: 1024 as number,
+    maxOutputTokens: 4096 as number,
   },
 
   reasoning: {
-    budgetTokens: 1024 as number,
+    budgetTokens: 2048 as number,
   },
 
   disclaimer:
