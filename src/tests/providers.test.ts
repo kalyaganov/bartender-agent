@@ -25,11 +25,11 @@ function fakeStream(items: unknown[]): AsyncIterable<unknown> {
 }
 
 const createMock = vi.fn();
-const ctorArgs: Array<{ apiKey?: string; baseURL?: string }> = [];
+const ctorArgs: Array<{ apiKey?: string; baseURL?: string; defaultHeaders?: Record<string, string> }> = [];
 
 vi.mock("openai", () => ({
   default: class {
-    constructor(opts: { apiKey?: string; baseURL?: string }) {
+    constructor(opts: { apiKey?: string; baseURL?: string; defaultHeaders?: Record<string, string> }) {
       ctorArgs.push(opts);
     }
     chat = { completions: { create: createMock } };
@@ -58,7 +58,11 @@ async function collect(p: LLMProvider): Promise<StreamPart[]> {
 }
 
 function bodyOf(): Record<string, unknown> {
-  return createMock.mock.calls[0][0] as Record<string, unknown>;
+  return createMock.mock.calls[0]?.[0] as Record<string, unknown> ?? {};
+}
+
+function errorChunk(message: string, code?: string | number, status?: number): unknown {
+  return { object: "error", error: { message, code, status } };
 }
 
 describe("OpenAIProvider streaming", () => {
@@ -265,5 +269,188 @@ describe("createProvider", () => {
       thinking: true,
     });
     expect(p.capabilities.supportsReasoning).toBe(true);
+  });
+
+  it("пробрасывает extraHeaders в конструктор", () => {
+    ctorArgs.length = 0;
+    createProvider({
+      endpoint: "https://x",
+      token: "t",
+      model: "m",
+      thinking: false,
+      extraHeaders: { "X-Custom": "val", "HTTP-Referer": "app" },
+    });
+    expect(ctorArgs[0]?.defaultHeaders).toEqual({ "X-Custom": "val", "HTTP-Referer": "app" });
+  });
+
+  it("extraHeaders не обязателен", () => {
+    ctorArgs.length = 0;
+    createProvider({
+      endpoint: "https://x",
+      token: "t",
+      model: "m",
+      thinking: false,
+    });
+    expect(ctorArgs[0]?.defaultHeaders).toBeUndefined();
+  });
+});
+
+describe("OpenAIProvider reasoning parameters (FR1–FR3)", () => {
+  beforeEach(() => {
+    createMock.mockReset();
+    ctorArgs.length = 0;
+    createMock.mockResolvedValue(fakeStream([]));
+  });
+
+  it("thinking: true → передаёт reasoning в теле запроса", async () => {
+    const p = makeProvider();
+    for await (const _ of p.streamTurn({
+      system: "",
+      messages: [],
+      generation: {
+        temperature: 0.8,
+        maxOutputTokens: 4096,
+        reasoning: { effort: "high", budgetTokens: 2048 },
+      },
+    })) {
+      void _;
+    }
+    const body = bodyOf();
+    expect(body.reasoning).toEqual({ effort: "high", max_tokens: 2048 });
+  });
+
+  it("thinking: true — fallback effort 'medium'", async () => {
+    const p = makeProvider();
+    for await (const _ of p.streamTurn({
+      system: "",
+      messages: [],
+      generation: {
+        temperature: 0.8,
+        maxOutputTokens: 4096,
+        reasoning: { budgetTokens: 1024 },
+      },
+    })) {
+      void _;
+    }
+    expect(bodyOf().reasoning).toEqual({ effort: "medium", max_tokens: 1024 });
+  });
+
+  it("thinking: true — не отправляет temperature", async () => {
+    const p = makeProvider();
+    for await (const _ of p.streamTurn({
+      system: "",
+      messages: [],
+      generation: {
+        temperature: 0.8,
+        maxOutputTokens: 4096,
+        reasoning: { budgetTokens: 2048 },
+      },
+    })) {
+      void _;
+    }
+    expect(bodyOf().temperature).toBeUndefined();
+  });
+
+  it("thinking: true — отправляет max_completion_tokens вместо max_tokens", async () => {
+    const p = makeProvider();
+    for await (const _ of p.streamTurn({
+      system: "",
+      messages: [],
+      generation: {
+        maxOutputTokens: 4096,
+        reasoning: { budgetTokens: 2048 },
+      },
+    })) {
+      void _;
+    }
+    const body = bodyOf();
+    expect(body.max_completion_tokens).toBe(4096);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it("thinking: false — отправляет temperature и max_tokens как раньше", async () => {
+    const p = makeProvider();
+    for await (const _ of p.streamTurn({
+      system: "",
+      messages: [],
+      generation: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    })) {
+      void _;
+    }
+    const body = bodyOf();
+    expect(body.temperature).toBe(0.7);
+    expect(body.max_tokens).toBe(2048);
+    expect(body.max_completion_tokens).toBeUndefined();
+    expect(body.reasoning).toBeUndefined();
+  });
+});
+
+describe("OpenAIProvider error chunk handling (FR5)", () => {
+  beforeEach(() => {
+    createMock.mockReset();
+    ctorArgs.length = 0;
+  });
+
+  it("бросает ProviderError при object: error в чанке", async () => {
+    createMock.mockResolvedValue(
+      fakeStream([
+        chunk({ content: "начал..." }),
+        errorChunk("content filter triggered", "content_filter", 400),
+      ]),
+    );
+    const p = makeProvider();
+    const events: StreamPart[] = [];
+    await expect(async () => {
+      for await (const ev of p.streamTurn({ system: "", messages: [] })) {
+        events.push(ev);
+      }
+    }).rejects.toThrow("content filter triggered");
+  });
+
+  it("классифицирует 4xx ошибку из чанка как badRequest", async () => {
+    createMock.mockResolvedValue(
+      fakeStream([errorChunk("bad", "invalid_request", 400)]),
+    );
+    const p = makeProvider();
+    try {
+      for await (const _ of p.streamTurn({ system: "", messages: [] })) { void _; }
+      expect.fail("должен был бросить");
+    } catch (err) {
+      const pe = err as { kind?: string };
+      expect(pe.kind).toBe("badRequest");
+    }
+  });
+
+  it("классифицирует 5xx как network и retryable", async () => {
+    createMock.mockResolvedValue(
+      fakeStream([errorChunk("server error", undefined, 500)]),
+    );
+    const p = makeProvider();
+    try {
+      for await (const _ of p.streamTurn({ system: "", messages: [] })) { void _; }
+      expect.fail("должен был бросить");
+    } catch (err) {
+      const pe = err as { kind?: string; retryable?: boolean };
+      expect(pe.kind).toBe("network");
+      expect(pe.retryable).toBe(true);
+    }
+  });
+
+  it("error без статуса — unknown, не ретраится", async () => {
+    createMock.mockResolvedValue(
+      fakeStream([errorChunk("unknown error")]),
+    );
+    const p = makeProvider();
+    try {
+      for await (const _ of p.streamTurn({ system: "", messages: [] })) { void _; }
+      expect.fail("должен был бросить");
+    } catch (err) {
+      const pe = err as { kind?: string; retryable?: boolean };
+      expect(pe.kind).toBe("unknown");
+      expect(pe.retryable).toBe(false);
+    }
   });
 });

@@ -6,6 +6,7 @@ export interface ProviderConfig {
   token: string;
   model: string;
   thinking: boolean;
+  extraHeaders?: Record<string, string>;
 }
 
 export function createProvider(cfg: ProviderConfig): LLMProvider {
@@ -17,6 +18,7 @@ export function createProvider(cfg: ProviderConfig): LLMProvider {
     apiKey: cfg.token,
     model: cfg.model,
     baseURL: cfg.endpoint,
+    extraHeaders: cfg.extraHeaders,
     capabilities,
   });
 }

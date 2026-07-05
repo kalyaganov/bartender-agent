@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { toProviderError } from "./errors";
+import { toProviderError, ProviderError } from "./errors";
 import type {
   FinishReason,
   LLMProvider,
@@ -21,6 +21,7 @@ interface ProviderCtorOpts {
   apiKey: string;
   model: string;
   baseURL?: string;
+  extraHeaders?: Record<string, string>;
   capabilities: ProviderCapabilities;
 }
 
@@ -31,33 +32,49 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
 
   constructor(opts: ProviderCtorOpts) {
-    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+    this.client = new OpenAI({
+      apiKey: opts.apiKey,
+      baseURL: opts.baseURL,
+      defaultHeaders: opts.extraHeaders,
+    });
     this.modelId = opts.model;
     this.capabilities = opts.capabilities;
   }
 
   async *streamTurn(opts: StreamTurnOptions): AsyncIterable<StreamPart> {
+    const reasoning = opts.generation?.reasoning;
     let stream;
     try {
+      const body: Record<string, unknown> = {
+        model: this.modelId,
+        stream: true,
+        messages: [
+          { role: "system", content: opts.system },
+          ...this.toMessages(opts.messages),
+        ],
+        tools: opts.tools?.map((t) => this.toOpenAITool(t)),
+        tool_choice: opts.tools?.length
+          ? this.mapToolChoice(opts.toolChoice)
+          : undefined,
+        top_p: opts.generation?.topP,
+        stop: opts.generation?.stopSequences,
+      };
+
+      if (reasoning) {
+        body.reasoning = {
+          effort: reasoning.effort ?? "medium",
+          max_tokens: reasoning.budgetTokens,
+        };
+        body.max_completion_tokens = opts.generation?.maxOutputTokens;
+      } else {
+        body.temperature = opts.generation?.temperature;
+        body.max_tokens = opts.generation?.maxOutputTokens;
+      }
+
       stream = await this.client.chat.completions.create(
-        {
-          model: this.modelId,
-          stream: true,
-          messages: [
-            { role: "system", content: opts.system },
-            ...this.toMessages(opts.messages),
-          ],
-          tools: opts.tools?.map((t) => this.toOpenAITool(t)),
-          tool_choice: opts.tools?.length
-            ? this.mapToolChoice(opts.toolChoice)
-            : undefined,
-          temperature: opts.generation?.temperature,
-          max_tokens: opts.generation?.maxOutputTokens,
-          top_p: opts.generation?.topP,
-          stop: opts.generation?.stopSequences,
-        },
+        body as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParams,
         { signal: opts.signal },
-      );
+      ) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
     } catch (err) {
       throw toProviderError(err);
     }
@@ -68,6 +85,22 @@ export class OpenAIProvider implements LLMProvider {
 
     try {
       for await (const chunk of stream) {
+        const errorChunk = chunk as { object?: string; error?: { message?: string; code?: string | number; status?: number } };
+        if (errorChunk.object === "error") {
+          const errStatus = typeof errorChunk.error?.status === "number"
+            ? errorChunk.error.status
+            : typeof errorChunk.error?.code === "number"
+              ? errorChunk.error.code
+              : undefined;
+          const errMessage = errorChunk.error?.message ?? "Stream error";
+          if (errStatus === undefined) {
+            throw new ProviderError(errMessage, "unknown", false);
+          }
+          const kind = errStatus >= 400 && errStatus < 500 ? "badRequest" as const : "network" as const;
+          const retryable = errStatus >= 500;
+          throw new ProviderError(errMessage, kind, retryable);
+        }
+
         if (chunk.usage) usage = chunk.usage;
         const choice = chunk.choices?.[0];
         const delta = choice?.delta as Record<string, unknown> | undefined;

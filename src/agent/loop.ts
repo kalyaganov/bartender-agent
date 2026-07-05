@@ -18,6 +18,7 @@ function getProvider(): LLMProvider {
     token: prefs.token!,
     model: prefs.model!,
     thinking: prefs.thinking ?? false,
+    extraHeaders: prefs.extraHeaders,
   });
 }
 

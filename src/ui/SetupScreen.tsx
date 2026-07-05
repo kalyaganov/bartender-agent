@@ -169,6 +169,11 @@ export function SetupScreen() {
             [{thinking ? "✓" : " "}] {thinking ? "ON" : "OFF"}
           </Text>
         </Box>
+        <Box>
+          <Text color="gray" dimColor>
+            Включает OpenRouter-совместимый reasoning ({"reasoning: {effort, max_tokens}"}). Не все эндпоинты поддерживают — при ошибке отключи.
+          </Text>
+        </Box>
 
         <Box gap={1}>
           <Text color={active === "submit" ? "cyan" : "gray"}>

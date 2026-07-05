@@ -11,6 +11,7 @@ export interface Preferences {
   token?: string;
   model?: string;
   thinking?: boolean;
+  extraHeaders?: Record<string, string>;
 }
 
 export function isConfigured(p: Preferences): boolean {
@@ -64,6 +65,9 @@ export async function loadPreferences(): Promise<Preferences> {
           ...(typeof obj.token === "string" ? { token: obj.token } : {}),
           ...(typeof obj.model === "string" ? { model: obj.model } : {}),
           ...(typeof obj.thinking === "boolean" ? { thinking: obj.thinking } : {}),
+          ...(obj.extraHeaders != null && typeof obj.extraHeaders === "object" && !Array.isArray(obj.extraHeaders)
+            ? { extraHeaders: obj.extraHeaders as Record<string, string> }
+            : {}),
         };
       }
       const migrated = migrateLegacy(parsed);

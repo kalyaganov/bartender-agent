@@ -28,6 +28,7 @@ export interface ToolSpec {
   inputSchema: Record<string, unknown>;
 }
 
+/** Маппится в OpenRouter-совместимый формат: {reasoning: {effort, max_tokens}}. */
 export interface ReasoningConfig {
   effort?: "low" | "medium" | "high";
   budgetTokens?: number;
