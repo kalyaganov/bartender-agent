@@ -44,6 +44,7 @@ import {
   loadPreferences,
   savePreferences,
   getPrefsPath,
+  hasProviderConnection,
   isConfigured,
   type Preferences,
 } from "../persistence";
@@ -65,6 +66,12 @@ describe("persistence (SPEC primitive-setup §4.1)", () => {
     await savePreferences(prefs);
     const loaded = await loadPreferences();
     expect(loaded).toEqual(prefs);
+  });
+
+  it("hasProviderConnection требует endpoint и token", () => {
+    expect(hasProviderConnection({ endpoint: "x", token: "y" })).toBe(true);
+    expect(hasProviderConnection({ endpoint: "x" })).toBe(false);
+    expect(hasProviderConnection({})).toBe(false);
   });
 
   it("isConfigured: true когда endpoint+token+model заданы", () => {

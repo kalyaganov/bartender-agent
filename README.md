@@ -86,7 +86,7 @@ npm install
 npm run dev
 ```
 
-При первом запуске откроется экран настройки — введи endpoint, token и модель (см. ниже).
+При первом запуске откроется экран настройки: сначала введи endpoint и token, затем выбери или введи ID модели (см. ниже).
 
 ## Конфигурация
 
@@ -105,12 +105,12 @@ npm run dev
 |---|---|
 | `endpoint` | OpenAI-compat базовый URL без суффикса `/chat/completions`. Примеры: `https://opencode.ai/zen/go/v1`, `https://api.openai.com/v1`, `https://api.deepseek.com/v1`. |
 | `token` | API-ключ. |
-| `model` | Идентификатор модели, который понимает эндпоинт (`deepseek-v4-pro`, `gpt-4o-mini`, `claude-3-5-haiku`, …). |
+| `model` | Идентификатор модели, который понимает эндпоинт (`deepseek-v4-pro`, `gpt-4o-mini`, `claude-3-5-haiku`, …). Если API поддерживает `GET /models`, его можно выбрать из списка. |
 | `thinking` | `true` → в запрос передаётся `reasoning: {budgetTokens}`. Для thinking-моделей (DeepSeek-reasoner, GLM-5.x, o-series) включай; для обычных — оставь `false`. |
 
 ### Удобная настройка
 
-Запусти `/setup` в TUI — откроется форма из 4 полей с навигацией Tab/стрелками. То же доступно из `/settings` → «Настроить провайдера».
+Запусти `/setup` в TUI — сначала сохрани endpoint и token в блоке подключения, затем выбери модель во втором блоке. Список можно загрузить через OpenAI-compatible `GET /models`; если провайдер его не публикует, введи точный ID вручную. Полная проверка Chat Completions, streaming и tool calling доступна после выбора модели. То же доступно из `/settings` → «Настроить LLM».
 
 Старый формат `preferences.json` с `credentials.custom.{apiKey, baseURL}` + `model` мигрируется автоматически при первом запуске. Другие легаси (`credentials.zai`, `credentials.minimax`, …) больше не поддерживаются — введи их заново через `/setup` как один endpoint.
 
@@ -119,8 +119,8 @@ npm run dev
 | Команда / клавиша | Действие |
 |---|---|
 | `/menu` | Меню коктейлей |
-| `/setup` | Настроить провайдера (endpoint, token, model, thinking) |
-| `/settings` | Настройки: сменить провайдера, перезапустить вечер, помощь, выход |
+| `/setup` | Настроить подключение и модель |
+| `/settings` | Настройки: изменить LLM, перезапустить вечер, помощь, выход |
 | `/help` | Подсказка по командам + дисклеймер |
 | `/exit` | Выйти из бара (сразу, с прощальной репликой) |
 | `/state` | Внутреннее состояние (debug) |

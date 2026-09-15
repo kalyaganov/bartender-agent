@@ -1,12 +1,10 @@
 import { OpenAIProvider } from "./openai";
+import type { ProviderConnectionConfig } from "../models";
 import type { LLMProvider, ProviderCapabilities } from "./types";
 
-export interface ProviderConfig {
-  endpoint: string;
-  token: string;
+export interface ProviderConfig extends ProviderConnectionConfig {
   model: string;
   thinking: boolean;
-  extraHeaders?: Record<string, string>;
 }
 
 export function createProvider(cfg: ProviderConfig): LLMProvider {
@@ -23,4 +21,5 @@ export function createProvider(cfg: ProviderConfig): LLMProvider {
   });
 }
 
+export type { ProviderConnectionConfig } from "../models";
 export type { LLMProvider } from "./types";

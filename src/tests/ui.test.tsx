@@ -74,7 +74,7 @@ describe("Face", () => {
 describe("matchCommands (SPEC-ui T2)", () => {
   it("находит /setup по префиксу /s", () => {
     expect(matchCommands("/s")).toEqual([
-      { name: "/setup", label: "настроить провайдера" },
+      { name: "/setup", label: "настроить подключение и модель" },
       { name: "/settings", label: "настройки" },
       { name: "/state", label: "состояние (debug)" },
     ]);
@@ -82,14 +82,14 @@ describe("matchCommands (SPEC-ui T2)", () => {
 
   it("фильтрует строго по префиксу: /se → /setup + /settings", () => {
     expect(matchCommands("/se")).toEqual([
-      { name: "/setup", label: "настроить провайдера" },
+      { name: "/setup", label: "настроить подключение и модель" },
       { name: "/settings", label: "настройки" },
     ]);
   });
 
   it("находит /setup по префиксу /setup", () => {
     expect(matchCommands("/setup")).toEqual([
-      { name: "/setup", label: "настроить провайдера" },
+      { name: "/setup", label: "настроить подключение и модель" },
     ]);
   });
 

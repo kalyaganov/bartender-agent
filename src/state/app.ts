@@ -7,6 +7,8 @@ import {
 export type Screen =
   | "bar"
   | "setup"
+  | "provider-connection"
+  | "model-selection"
   | "menu"
   | "exit-confirm";
 

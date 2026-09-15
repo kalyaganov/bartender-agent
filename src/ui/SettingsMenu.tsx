@@ -23,7 +23,7 @@ export function SettingsMenu() {
     : "не настроен";
 
   const items: SelectItem[] = [
-    { key: "setup", label: "Настроить провайдера", hint: setupHint },
+    { key: "setup", label: "Настроить LLM", hint: setupHint },
     { key: "restart", label: "Перезапустить вечер" },
     { key: "help", label: "Помощь" },
     { key: "exit", label: "Выйти" },

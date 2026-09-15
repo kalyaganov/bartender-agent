@@ -14,8 +14,12 @@ export interface Preferences {
   extraHeaders?: Record<string, string>;
 }
 
+export function hasProviderConnection(p: Preferences): boolean {
+  return Boolean(p.endpoint && p.token);
+}
+
 export function isConfigured(p: Preferences): boolean {
-  return Boolean(p.endpoint && p.token && p.model);
+  return Boolean(hasProviderConnection(p) && p.model);
 }
 
 let migrated = false;

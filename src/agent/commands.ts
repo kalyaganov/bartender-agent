@@ -4,7 +4,7 @@ import { formatMenu } from "../data/cocktails";
 import { exitApp } from "../shutdown";
 
 export const HELP =
-  "/menu — меню · /setup — настроить провайдера · /settings — настройки · " +
+  "/menu — меню · /setup — настроить подключение и модель · /settings — настройки · " +
   "/help — подсказка · /exit — выход · /state — состояние (debug). " +
   "ESC или Ctrl+C — подтверждение выхода. Это игра-симуляция, бармен вымышлен.";
 
@@ -15,7 +15,7 @@ export interface CommandDef {
 
 export const COMMANDS: CommandDef[] = [
   { name: "/menu", label: "меню коктейлей" },
-  { name: "/setup", label: "настроить провайдера" },
+  { name: "/setup", label: "настроить подключение и модель" },
   { name: "/settings", label: "настройки" },
   { name: "/help", label: "подсказка по командам" },
   { name: "/exit", label: "выход" },

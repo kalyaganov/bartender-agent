@@ -2,6 +2,8 @@
 
 Дополняет [SPEC-primitive-setup.md](./SPEC-primitive-setup.md) и [SPEC-byollm-reliability.md](./SPEC-byollm-reliability.md).
 
+> ⚠ Размещение проверки внутри прежней единой формы заменено [SPEC-provider-model-settings.md](./SPEC-provider-model-settings.md): получение `/models` находится в блоке подключения, а полная проверка Chat Completions/tool calling — в блоке модели.
+
 ## Проблема
 
 Форма BYOLLM принимает endpoint, token, model и Thinking, но пользователь не может проверить введённые значения до сохранения и запуска игрового хода. Неясно, какой URL ожидается: часть пользователей вставит полный `/chat/completions`, хотя OpenAI SDK ожидает базовый URL. Также неочевидно, нужен ли Thinking конкретной модели.

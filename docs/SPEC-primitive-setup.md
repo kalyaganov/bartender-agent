@@ -1,10 +1,12 @@
 # SPEC — Примитивная настройка провайдера (одна форма)
 
 > ⚠ Поведение сохранения и навигации setup уточнено в [SPEC-byollm-reliability.md](./SPEC-byollm-reliability.md).
+>
+> ⚠ UI одной формы в §4.6 заменён двумя блоками подключения и выбора модели в [SPEC-provider-model-settings.md](./SPEC-provider-model-settings.md). Плоская схема preferences и архитектура адаптера остаются актуальными.
 
 > Каталог из 11 провайдеров, opencode-импорт, state-машина выбора и env-var override заменяются **одной формой**: endpoint, token, model, thinking on/off. Цель — минимально жизнеспособный конфиг для одного юзера с одним OpenAI-compat эндпоинтом.
 
-- [SPEC.md](./SPEC.md) · [SPEC-providers.md](./SPEC-providers.md) (уступает место этой SPEC — считать superseded) · [BACKLOG.md](./BACKLOG.md)
+- [SPEC.md](./SPEC.md) · [SPEC-providers.md](./SPEC-providers.md) (уступает место этой SPEC — считать superseded) · [SPEC-provider-model-settings.md](./SPEC-provider-model-settings.md) · [BACKLOG.md](./BACKLOG.md)
 
 ---
 

@@ -2,6 +2,8 @@ import { useInput } from "ink";
 import { useAppStore } from "./state/app";
 import { BarScreen } from "./ui/BarScreen";
 import { SetupScreen } from "./ui/SetupScreen";
+import { ProviderConnectionScreen } from "./ui/ProviderConnectionScreen";
+import { ModelSelectionScreen } from "./ui/ModelSelectionScreen";
 import { SettingsMenu } from "./ui/SettingsMenu";
 import { ExitConfirm } from "./ui/ExitConfirm";
 
@@ -17,6 +19,10 @@ export function App() {
   switch (screen) {
     case "setup":
       return <SetupScreen />;
+    case "provider-connection":
+      return <ProviderConnectionScreen />;
+    case "model-selection":
+      return <ModelSelectionScreen />;
     case "menu":
       return <SettingsMenu />;
     case "exit-confirm":
