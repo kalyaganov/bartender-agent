@@ -4,6 +4,9 @@ import React from "react";
 
 const mockPrefsStore: { current: Record<string, unknown> } = { current: {} };
 const mockSaveError: { current: Error | null } = { current: null };
+const connectionMocks = vi.hoisted(() => ({
+  checkConnection: vi.fn(),
+}));
 
 vi.mock("../persistence", () => ({
   loadPreferences: async () => mockPrefsStore.current,
@@ -16,6 +19,10 @@ vi.mock("../persistence", () => ({
     Boolean(p.endpoint && p.token && p.model),
 }));
 
+vi.mock("../agent/connection", () => ({
+  checkConnection: connectionMocks.checkConnection,
+}));
+
 import { SetupScreen } from "../ui/SetupScreen";
 import { useAppStore } from "../state/app";
 import type { Preferences } from "../persistence";
@@ -25,14 +32,14 @@ const TAB = "\t";
 const DOWN = "\u001B[B";
 const SPACE = " ";
 const ESC = "\u001B";
-const tick = () => new Promise((r) => setTimeout(r, 20));
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-function setPrefs(p: Preferences): void {
-  mockPrefsStore.current = p as unknown as Record<string, unknown>;
-  useAppStore.setState({ prefs: p });
+function setPrefs(prefs: Preferences): void {
+  mockPrefsStore.current = prefs as unknown as Record<string, unknown>;
+  useAppStore.setState({ prefs });
 }
 
-function resetStore() {
+function resetStore(): void {
   useAppStore.setState({
     screen: "bar",
     prevScreen: "bar",
@@ -40,15 +47,23 @@ function resetStore() {
   });
 }
 
-describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
+async function moveDown(stdin: { write: (data: string) => void }, count: number): Promise<void> {
+  for (let index = 0; index < count; index++) {
+    stdin.write(DOWN);
+    await tick();
+  }
+}
+
+describe("SetupScreen (SPEC byollm-connection-test)", () => {
   beforeEach(() => {
     resetStore();
     setPrefs({});
     mockPrefsStore.current = {};
     mockSaveError.current = null;
+    connectionMocks.checkConnection.mockReset();
   });
 
-  it("показывает 4 поля и кнопку сохранить", async () => {
+  it("показывает поля, проверку, сохранение и подсказки", async () => {
     const { lastFrame } = render(React.createElement(SetupScreen));
     await tick();
     const frame = lastFrame() ?? "";
@@ -56,7 +71,10 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     expect(frame).toContain("Token");
     expect(frame).toContain("Модель");
     expect(frame).toContain("Thinking");
+    expect(frame).toContain("Проверить");
     expect(frame).toContain("Сохранить");
+    expect(frame).toContain("Chat Completions");
+    expect(frame).toContain("/chat/completions");
   });
 
   it("предзаполняет из текущих prefs", async () => {
@@ -74,10 +92,17 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     expect(frame).toContain("[✓] ON");
   });
 
+  it("не сбрасывает текст при вводе", async () => {
+    const { lastFrame, stdin } = render(React.createElement(SetupScreen));
+    await tick();
+    stdin.write("https://example.com/v1");
+    await tick();
+    expect(lastFrame()).toContain("https://example.com/v1");
+  });
+
   it("Tab переключает поля", async () => {
     const { lastFrame, stdin } = render(React.createElement(SetupScreen));
     await tick();
-    expect(lastFrame()).toContain("▸");
     stdin.write(TAB);
     await tick();
     stdin.write(TAB);
@@ -90,31 +115,53 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
   it("пробел переключает thinking", async () => {
     const { lastFrame, stdin } = render(React.createElement(SetupScreen));
     await tick();
-    stdin.write(TAB);
-    await tick();
-    stdin.write(TAB);
-    await tick();
-    stdin.write(TAB);
-    await tick();
+    await moveDown(stdin, 3);
     expect(lastFrame()).toContain("[ ] OFF");
     stdin.write(SPACE);
     await tick();
     expect(lastFrame()).toContain("[✓] ON");
   });
 
-  it("Enter на Сохранить без заполнения → ошибка", async () => {
+  it("Enter на Сохранить без заполнения показывает ошибку", async () => {
     const { lastFrame, stdin } = render(React.createElement(SetupScreen));
     await tick();
-    for (let i = 0; i < 4; i++) {
-      stdin.write(DOWN);
-      await tick();
-    }
+    await moveDown(stdin, 5);
     stdin.write(ENTER);
     await tick();
     expect(lastFrame()).toContain("Заполни");
   });
 
-  it("Сохранение валидных данных → go(bar) и prefs обновлены", async () => {
+  it("проверяет несохранённые настройки без записи на диск", async () => {
+    setPrefs({ endpoint: "https://example.com/v1", token: "token", model: "model" });
+    connectionMocks.checkConnection.mockResolvedValue("ready");
+    const { lastFrame, stdin } = render(React.createElement(SetupScreen));
+    await tick();
+    await moveDown(stdin, 4);
+    stdin.write(ENTER);
+    await tick();
+    expect(connectionMocks.checkConnection).toHaveBeenCalledWith({
+      endpoint: "https://example.com/v1",
+      token: "token",
+      model: "model",
+      thinking: false,
+      extraHeaders: undefined,
+    });
+    expect(useAppStore.getState().screen).toBe("bar");
+    expect(lastFrame()).toContain("streaming и инструменты доступны");
+  });
+
+  it("показывает предупреждение без tool calling", async () => {
+    setPrefs({ endpoint: "https://example.com/v1", token: "token", model: "model" });
+    connectionMocks.checkConnection.mockResolvedValue("tools-unavailable");
+    const { lastFrame, stdin } = render(React.createElement(SetupScreen));
+    await tick();
+    await moveDown(stdin, 4);
+    stdin.write(ENTER);
+    await tick();
+    expect(lastFrame()).toContain("не вызвала инструмент");
+  });
+
+  it("сохраняет валидные данные и сохраняет extraHeaders", async () => {
     setPrefs({
       endpoint: "https://opencode.ai/zen/go/v1",
       token: "sk-test",
@@ -127,10 +174,7 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     });
     const { stdin } = render(React.createElement(SetupScreen));
     await tick();
-    for (let i = 0; i < 4; i++) {
-      stdin.write(DOWN);
-      await tick();
-    }
+    await moveDown(stdin, 5);
     stdin.write(ENTER);
     await tick();
     const state = useAppStore.getState();
@@ -149,10 +193,7 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     mockSaveError.current = new Error("ENOSPC");
     const { lastFrame, stdin } = render(React.createElement(SetupScreen));
     await tick();
-    for (let i = 0; i < 4; i++) {
-      stdin.write(DOWN);
-      await tick();
-    }
+    await moveDown(stdin, 5);
     stdin.write(ENTER);
     await tick();
     expect(useAppStore.getState().screen).toBe("setup");

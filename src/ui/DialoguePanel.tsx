@@ -1,5 +1,26 @@
+import { useEffect, useState } from "react";
 import { Box, Text } from "ink";
 import type { Line } from "../state/store";
+
+const THINKING_FRAMES = ["", ".", "..", "..."];
+const THINKING_TICK_MS = 350;
+
+function ThinkingIndicator() {
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFrame((current) => (current + 1) % THINKING_FRAMES.length);
+    }, THINKING_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <Text color="gray" dimColor>
+      {"  "}Виктор задумался{THINKING_FRAMES[frame]}
+    </Text>
+  );
+}
 
 export function DialoguePanel({
   lines,
@@ -45,11 +66,7 @@ export function DialoguePanel({
           {"  "}Виктор: {streaming}
           <Text color="gray">▋</Text>
         </Text>
-      ) : busy ? (
-        <Text color="gray" dimColor>
-          {"  "}Виктор протирает бокал…
-        </Text>
-      ) : null}
+      ) : busy ? <ThinkingIndicator /> : null}
     </Box>
   );
 }

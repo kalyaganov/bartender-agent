@@ -15,8 +15,10 @@ import { runTurn } from "../agent/loop";
 import { handleCommand, matchCommands } from "../agent/commands";
 import { toProviderError } from "../agent/providers/errors";
 import { config } from "../config";
+import { FACE_IMAGE_ROWS, getTerminalImageProtocol } from "./terminalImage";
 
 const FIXED_OVERHEAD = config.ui.fixedOverhead;
+const ASCII_FACE_ROWS = 9;
 
 function providerErrorMessage(error: unknown): string | null {
   const providerError = toProviderError(error);
@@ -69,19 +71,17 @@ export function BarScreen() {
     if (cmdIndex > popupItems.length - 1) setCmdIndex(0);
   }, [popupItems.length, cmdIndex]);
 
-  const overhead = FIXED_OVERHEAD + (pouring ? 1 : 0);
+  const faceRows = getTerminalImageProtocol() ? FACE_IMAGE_ROWS : ASCII_FACE_ROWS;
+  const thinking = busy && !streaming;
+  const overhead = FIXED_OVERHEAD + faceRows - ASCII_FACE_ROWS + (pouring ? 1 : 0);
   const dialogueMaxLines = Math.max(
     2,
     vp.rows - overhead - popupItems.length,
   );
 
   useInput((_input, key) => {
-    if (key.escape) {
-      if (inputValue) {
-        setInputValue("");
-      } else {
-        useAppStore.getState().go("exit-confirm");
-      }
+    if (key.escape && !inputValue) {
+      useAppStore.getState().go("exit-confirm");
     }
   });
 
@@ -123,7 +123,7 @@ export function BarScreen() {
       <StatusBar barTimeMin={barTimeMin} phase={phaseLabel} />
 
       <Box flexDirection="column" alignItems="center" marginY={1}>
-        <Face mood={mood} />
+        <Face mood={mood} thinking={thinking} />
       </Box>
 
       <DialoguePanel

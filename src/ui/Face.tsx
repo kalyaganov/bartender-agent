@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
 import { Box, Text } from "ink";
 import { getFace } from "./faces";
+import {
+  clearTerminalImages,
+  FACE_IMAGE_COLUMNS,
+  FACE_IMAGE_ROWS,
+  getFaceImageSequence,
+  getTerminalImageProtocol,
+  placeTerminalImage,
+} from "./terminalImage";
 import type { Mood } from "../agent/schemas";
 import { config } from "../config";
 
 const TWITCH_TICK_MS = 70;
 const TWITCH_TICKS = 4;
 
-export function Face({ mood }: { mood: Mood }) {
+function AsciiFace({ mood }: { mood: Mood }) {
   const art = getFace(mood);
   const [blinking, setBlinking] = useState(false);
   const [twitch, setTwitch] = useState(false);
@@ -46,4 +54,28 @@ export function Face({ mood }: { mood: Mood }) {
       ))}
     </Box>
   );
+}
+
+function ImageFace({ mood, thinking }: { mood: Mood; thinking: boolean }) {
+  const displayMood = thinking ? "thoughtful" : mood;
+  const protocol = getTerminalImageProtocol();
+  const sequence = protocol ? getFaceImageSequence(displayMood, protocol) : null;
+
+  useEffect(() => {
+    if (!protocol || !sequence) return;
+    process.stdout.write(
+      clearTerminalImages(protocol) + placeTerminalImage(sequence),
+    );
+    return () => {
+      process.stdout.write(clearTerminalImages(protocol));
+    };
+  }, [protocol, sequence]);
+
+  if (!sequence) return <AsciiFace mood={displayMood} />;
+
+  return <Box width={FACE_IMAGE_COLUMNS} height={FACE_IMAGE_ROWS} />;
+}
+
+export function Face({ mood, thinking = false }: { mood: Mood; thinking?: boolean }) {
+  return <ImageFace mood={mood} thinking={thinking} />;
 }

@@ -1,0 +1,22 @@
+{
+  "//": "Every command in stage1 was run once, in this project, before being written here.",
+  "//verification": "The one thing this repository cannot work out for you: what checks this project has, and where the change stops being under your control once it ships. artifact_kind: service | library | cli | chart | migration | model-boundary | plugin.",
+  "verification": {
+    "stage1": [
+      "npm run typecheck",
+      "npm test"
+    ],
+    "stage2": [
+      "npm run build",
+      "tmp_dir=$(mktemp -d \"${TMPDIR:-/tmp}/bartender-gopnik.XXXXXX\"); trap 'rm -rf \"$tmp_dir\"' EXIT; npm_config_cache=\"$tmp_dir/cache\" npm pack --ignore-scripts --pack-destination \"$tmp_dir\" >/dev/null && npm_config_cache=\"$tmp_dir/cache\" npm install --prefix \"$tmp_dir\" --ignore-scripts --no-save \"$tmp_dir\"/bartender-agent-*.tgz >/dev/null && test -x \"$tmp_dir/node_modules/.bin/bartender\""
+    ],
+    "notes": "The installed CLI was also launched successfully in a clean temporary consumer environment using a pseudo-terminal; the setup screen rendered and exited through the normal confirmation flow. No deployed service or staging target exists for this CLI.",
+    "//stage2_unreachable": "Only if there is genuinely nowhere to deploy. Set it to WHY, and every verdict narrows to Stage 1 and quotes that reason. Leaving it blank is rejected: a narrowed verdict that cannot say why is the gap this key exists to make visible.",
+    "//stage2_unreachable_example": "no dev cluster; this is an internal script run by hand",
+    "artifact_kind": "cli",
+    "surfaces": [
+      "cli"
+    ]
+  },
+  "language": "ru"
+}
