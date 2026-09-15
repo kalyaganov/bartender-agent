@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { FAKE_HOME } = vi.hoisted(() => ({ FAKE_HOME: "/fake/persist-home" }));
 const files: Record<string, string> = {};
 const modes: Record<string, number> = {};
+let writeError: Error | null = null;
 
 vi.mock("node:os", () => ({ homedir: () => FAKE_HOME }));
 
@@ -15,6 +16,7 @@ vi.mock("node:fs", () => ({
       throw err;
     },
     writeFile: async (path: string, data: string, opts: { mode?: number }) => {
+      if (writeError) throw writeError;
       files[path] = data;
       if (opts?.mode) modes[path] = opts.mode;
     },
@@ -25,7 +27,16 @@ vi.mock("node:fs", () => ({
       err.code = "ENOENT";
       throw err;
     },
-    rename: async () => undefined,
+    rename: async (from: string, to: string) => {
+      if (from in files) {
+        files[to] = files[from];
+        delete files[from];
+      }
+      if (from in modes) {
+        modes[to] = modes[from];
+        delete modes[from];
+      }
+    },
   },
 }));
 
@@ -41,6 +52,7 @@ describe("persistence (SPEC primitive-setup §4.1)", () => {
   beforeEach(() => {
     for (const k of Object.keys(files)) delete files[k];
     for (const k of Object.keys(modes)) delete modes[k];
+    writeError = null;
   });
 
   it("round-trip {endpoint, token, model, thinking}", async () => {
@@ -97,5 +109,38 @@ describe("persistence (SPEC primitive-setup §4.1)", () => {
   it("файл создаётся с режимом 0o600 (безопасность ключей)", async () => {
     await savePreferences({ endpoint: "x", token: "y", model: "z" });
     expect(modes[getPrefsPath()]).toBe(0o600);
+  });
+
+  it("атомарная замена исправляет права существующего файла", async () => {
+    files[getPrefsPath()] = JSON.stringify({ endpoint: "old" });
+    modes[getPrefsPath()] = 0o644;
+    await savePreferences({ endpoint: "x", token: "y", model: "z" });
+    expect(modes[getPrefsPath()]).toBe(0o600);
+  });
+
+  it("не подавляет ошибку записи", async () => {
+    writeError = new Error("ENOSPC");
+    await expect(savePreferences({ endpoint: "x" })).rejects.toThrow("ENOSPC");
+  });
+
+  it("сериализует записи и оставляет последнее значение", async () => {
+    await Promise.all([
+      savePreferences({ endpoint: "first" }),
+      savePreferences({ endpoint: "second" }),
+    ]);
+    await expect(loadPreferences()).resolves.toEqual({ endpoint: "second" });
+  });
+
+  it("загружает частичные настройки по любому известному полю", async () => {
+    files[getPrefsPath()] = JSON.stringify({
+      model: "partial-model",
+      thinking: true,
+      extraHeaders: { "X-Valid": "yes", "X-Invalid": 42 },
+    });
+    await expect(loadPreferences()).resolves.toEqual({
+      model: "partial-model",
+      thinking: true,
+      extraHeaders: { "X-Valid": "yes" },
+    });
   });
 });

@@ -44,10 +44,16 @@ export function applyAction(
   action: BartenderAction,
   now: number = Date.now(),
 ): GameState {
+  const perceivedScore = state.bacProxy > 0
+    ? Math.max(
+        action.drunkennessAssessment.score,
+        state.perceivedScore - config.drunkenness.maxPerceivedScoreDropPerTurn,
+      )
+    : action.drunkennessAssessment.score;
   const next: GameState = {
     ...state,
     mood: action.mood,
-    perceivedScore: action.drunkennessAssessment.score,
+    perceivedScore,
   };
 
   // Фазы прощания/отказа: call_taxi открывает leaving; следующий ход → closed.

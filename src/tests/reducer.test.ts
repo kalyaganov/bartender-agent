@@ -28,6 +28,15 @@ describe("reducer applyAction (M2)", () => {
     expect(next.drunkenness).toBeCloseTo(2.4, 5);
   });
 
+  it("не позволяет резко занизить оценку при ненулевом bacProxy", () => {
+    const next = applyAction(
+      { ...initialGameState, perceivedScore: 9, bacProxy: 4, drunkenness: 8.8 },
+      action({ drunkennessAssessment: { score: 0, cues: [] } }),
+    );
+    expect(next.perceivedScore).toBe(7);
+    expect(next.drunkenness).toBeGreaterThanOrEqual(7);
+  });
+
   it("call_taxi переводит фазу open → leaving", () => {
     const next = applyAction(initialGameState, action({ action: "call_taxi" }));
     expect(next.phase).toBe("leaving");

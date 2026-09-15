@@ -3,6 +3,7 @@ export const config = {
     perceivedWeight: 0.8,
     bacProxyWeight: 0.4,
     refuseThreshold: 7,
+    maxPerceivedScoreDropPerTurn: 2,
     metabolismRatePerMin: 0.05,
   },
 

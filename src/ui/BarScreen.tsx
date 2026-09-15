@@ -13,9 +13,28 @@ import { useStore } from "../state/store";
 import { useAppStore } from "../state/app";
 import { runTurn } from "../agent/loop";
 import { handleCommand, matchCommands } from "../agent/commands";
+import { toProviderError } from "../agent/providers/errors";
 import { config } from "../config";
 
 const FIXED_OVERHEAD = config.ui.fixedOverhead;
+
+function providerErrorMessage(error: unknown): string | null {
+  const providerError = toProviderError(error);
+  switch (providerError.kind) {
+    case "abort":
+      return null;
+    case "auth":
+      return "Провайдер отклонил token. Проверь настройки через /setup.";
+    case "rateLimit":
+      return "Провайдер ограничил частоту запросов. Попробуй ещё раз позже.";
+    case "badRequest":
+      return "Провайдер отклонил запрос. Проверь endpoint, модель и Thinking через /setup.";
+    case "network":
+      return "Не удалось связаться с провайдером. Проверь endpoint и подключение.";
+    case "unknown":
+      return "Провайдер вернул неизвестную ошибку. Проверь настройки через /setup.";
+  }
+}
 
 export function BarScreen() {
   const vp = useViewport();
@@ -82,7 +101,10 @@ export function BarScreen() {
     const resolved = popupItems.length > 0 ? popupItems[cmdIndex].name : text;
     if (handleCommand(resolved)) return;
     if (busy) return;
-    void runTurn(resolved).catch(() => {});
+    void runTurn(resolved).catch((error: unknown) => {
+      const message = providerErrorMessage(error);
+      if (message) useStore.getState().addSystemLine(message);
+    });
   };
 
   const phaseLabel =

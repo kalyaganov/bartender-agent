@@ -1,6 +1,26 @@
-import { describe, it, expect } from "vitest";
-import { resolveInitialScreen } from "../bootstrap";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+const persistenceMocks = vi.hoisted(() => ({
+  prefs: {} as Record<string, unknown>,
+  save: vi.fn(),
+}));
+
+vi.mock("../persistence", () => ({
+  loadPreferences: async () => persistenceMocks.prefs,
+  savePreferences: persistenceMocks.save,
+  isConfigured: (p: { endpoint?: string; token?: string; model?: string }) =>
+    Boolean(p.endpoint && p.token && p.model),
+}));
+
+import { bootstrap, resolveInitialScreen } from "../bootstrap";
+import { useAppStore } from "../state/app";
 import type { Preferences } from "../persistence";
+
+beforeEach(() => {
+  persistenceMocks.prefs = {};
+  persistenceMocks.save.mockReset();
+  useAppStore.setState({ screen: "bar", prevScreen: "bar", prefs: {} });
+});
 
 describe("resolveInitialScreen (SPEC primitive-setup §4.8)", () => {
   it("настроено → bar", () => {
@@ -37,5 +57,19 @@ describe("resolveInitialScreen (SPEC primitive-setup §4.8)", () => {
         thinking: true,
       }),
     ).toBe("bar");
+  });
+});
+
+describe("bootstrap", () => {
+  it("гидратирует store без повторного сохранения", async () => {
+    persistenceMocks.prefs = {
+      endpoint: "https://example.com/v1",
+      token: "token",
+      model: "model",
+    };
+    await bootstrap();
+    expect(useAppStore.getState().prefs).toEqual(persistenceMocks.prefs);
+    expect(useAppStore.getState().screen).toBe("bar");
+    expect(persistenceMocks.save).not.toHaveBeenCalled();
   });
 });

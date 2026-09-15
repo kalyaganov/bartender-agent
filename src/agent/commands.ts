@@ -71,10 +71,16 @@ export function handleCommand(text: string): boolean {
       const uSummary = u
         ? ` · tokens: ${u.inputTokens ?? "?"}/${u.outputTokens ?? "?"}`
         : "";
+      const t = store.lastTurnStatus;
+      const errorSummary = t.errorKind ? ` · ошибка=${t.errorKind}` : "";
+      const conflictSummary = t.contentConflict ? " · content≠tool.reply" : "";
       store.addSystemLine(
         `mood=${store.mood} · опьянение=${store.drunkenness.toFixed(1)} ` +
           `· выпито=${store.bacProxy.toFixed(1)} · подач=${store.served.length} ` +
           `· счёт=${store.tab}₽ · фаза=${store.phase}${uSummary}\n` +
+          `ход: попыток=${t.attempts} · tool=${t.toolCallStatus} ` +
+          `(${t.bartenderToolCalls}/${t.unexpectedToolCalls}) · reply=${t.replySource}` +
+          `${conflictSummary}${errorSummary}\n` +
           `reasoning: ${rSummary}`,
       );
       return true;

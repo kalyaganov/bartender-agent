@@ -3,10 +3,12 @@ import { render } from "ink-testing-library";
 import React from "react";
 
 const mockPrefsStore: { current: Record<string, unknown> } = { current: {} };
+const mockSaveError: { current: Error | null } = { current: null };
 
 vi.mock("../persistence", () => ({
   loadPreferences: async () => mockPrefsStore.current,
   savePreferences: async (p: Record<string, unknown>) => {
+    if (mockSaveError.current) throw mockSaveError.current;
     mockPrefsStore.current = p;
   },
   getPrefsPath: () => "/fake/prefs.json",
@@ -22,6 +24,7 @@ const ENTER = "\r";
 const TAB = "\t";
 const DOWN = "\u001B[B";
 const SPACE = " ";
+const ESC = "\u001B";
 const tick = () => new Promise((r) => setTimeout(r, 20));
 
 function setPrefs(p: Preferences): void {
@@ -42,6 +45,7 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     resetStore();
     setPrefs({});
     mockPrefsStore.current = {};
+    mockSaveError.current = null;
   });
 
   it("показывает 4 поля и кнопку сохранить", async () => {
@@ -116,6 +120,10 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
       token: "sk-test",
       model: "deepseek-v4-pro",
       thinking: false,
+      extraHeaders: {
+        "HTTP-Referer": "https://example.com",
+        "X-Title": "Bartender",
+      },
     });
     const { stdin } = render(React.createElement(SetupScreen));
     await tick();
@@ -129,5 +137,35 @@ describe("SetupScreen (SPEC primitive-setup §4.6)", () => {
     expect(state.screen).toBe("bar");
     expect(state.prefs.endpoint).toBe("https://opencode.ai/zen/go/v1");
     expect(state.prefs.model).toBe("deepseek-v4-pro");
+    expect(state.prefs.extraHeaders).toEqual({
+      "HTTP-Referer": "https://example.com",
+      "X-Title": "Bartender",
+    });
+  });
+
+  it("ошибка сохранения оставляет форму открытой", async () => {
+    setPrefs({ endpoint: "https://example.com/v1", token: "token", model: "model" });
+    useAppStore.setState({ screen: "setup", prevScreen: "menu" });
+    mockSaveError.current = new Error("ENOSPC");
+    const { lastFrame, stdin } = render(React.createElement(SetupScreen));
+    await tick();
+    for (let i = 0; i < 4; i++) {
+      stdin.write(DOWN);
+      await tick();
+    }
+    stdin.write(ENTER);
+    await tick();
+    expect(useAppStore.getState().screen).toBe("setup");
+    expect(lastFrame()).toContain("Не удалось сохранить настройки");
+  });
+
+  it("ESC возвращает из setup в меню", async () => {
+    setPrefs({ endpoint: "https://example.com/v1", token: "token", model: "model" });
+    useAppStore.setState({ screen: "setup", prevScreen: "menu" });
+    const { stdin } = render(React.createElement(SetupScreen));
+    await tick();
+    stdin.write(ESC);
+    await tick();
+    expect(useAppStore.getState().screen).toBe("menu");
   });
 });

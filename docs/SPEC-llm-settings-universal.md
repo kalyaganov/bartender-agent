@@ -1,5 +1,7 @@
 # SPEC — Универсальные LLM-настройки для OpenAI-совместимых провайдеров
 
+> ⚠ Классификация SSE-ошибок уточнена в [SPEC-byollm-reliability.md](./SPEC-byollm-reliability.md).
+
 > Исправление багов и расширение адаптера `OpenAIProvider` для корректной работы с максимально широким кругом OpenAI-compat эндпоинтов (OpenRouter, DeepSeek, Groq, xAI, Together, локальные endpoint'ы и др.).
 
 - [SPEC-primitive-setup.md](./SPEC-primitive-setup.md) — архитектура `Preferences` / `createProvider`

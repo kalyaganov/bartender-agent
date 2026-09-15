@@ -44,7 +44,7 @@ export const DrunkennessAssessment = z.object({
 export type DrunkennessAssessment = z.infer<typeof DrunkennessAssessment>;
 
 export const BartenderAction = z.object({
-  reply: z.string().describe("Разговорная реплика бармена (обязательно, 1-3 предложения, в образе)"),
+  reply: z.string().trim().min(1).describe("Разговорная реплика бармена (обязательно, 1-3 предложения, в образе)"),
   mood: MoodEnum,
   action: ActionEnum,
   drink: DrinkSchema.optional(),

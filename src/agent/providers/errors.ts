@@ -28,13 +28,13 @@ export class ProviderError extends Error {
 }
 
 interface HttpErrorLike {
-  status?: number;
+  status?: number | string;
   message?: string;
   headers?: Record<string, string> | Headers;
 }
 
 function isAbort(err: unknown): boolean {
-  if (err instanceof Error && err.name === "AbortError") return true;
+  if (err instanceof Error && (err.name === "AbortError" || err.constructor.name === "APIUserAbortError")) return true;
   return (
     typeof DOMException !== "undefined" &&
     err instanceof DOMException &&
@@ -71,8 +71,16 @@ export function toProviderError(err: unknown): ProviderError {
   }
 
   const http = err as HttpErrorLike;
-  const status = typeof http?.status === "number" ? http.status : undefined;
-  const message = err instanceof Error ? err.message : String(err);
+  const rawStatus = http?.status;
+  const parsedStatus = typeof rawStatus === "string" ? Number(rawStatus) : rawStatus;
+  const status = typeof parsedStatus === "number" && Number.isInteger(parsedStatus)
+    ? parsedStatus
+    : undefined;
+  const message = err instanceof Error
+    ? err.message
+    : typeof http?.message === "string"
+      ? http.message
+      : String(err);
 
   if (status === undefined) {
     return new ProviderError(message || "Сетевая ошибка", "network", true, undefined, err);

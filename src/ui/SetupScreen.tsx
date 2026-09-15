@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { useAppStore } from "../state/app";
-import type { Preferences } from "../persistence";
+import { isConfigured, type Preferences } from "../persistence";
 
 type Field = "endpoint" | "token" | "model" | "thinking" | "submit";
 
@@ -24,6 +24,7 @@ const FIELD_LABELS: Record<Field, string> = {
 
 export function SetupScreen() {
   const go = useAppStore((s) => s.go);
+  const back = useAppStore((s) => s.back);
   const setPrefs = useAppStore((s) => s.setPrefs);
   const initial = useAppStore((s) => s.prefs);
 
@@ -33,10 +34,12 @@ export function SetupScreen() {
   const [thinking, setThinking] = useState(initial.thinking ?? false);
   const [idx, setIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const active = FIELD_ORDER[idx];
 
-  function submit() {
+  async function submit() {
+    if (saving) return;
     const trimmedEndpoint = endpoint.trim();
     const trimmedToken = token.trim();
     const trimmedModel = model.trim();
@@ -45,22 +48,31 @@ export function SetupScreen() {
       return;
     }
     const next: Preferences = {
+      ...initial,
       endpoint: trimmedEndpoint,
       token: trimmedToken,
       model: trimmedModel,
       thinking,
     };
-    setPrefs(next);
     setError(null);
-    go("bar");
+    setSaving(true);
+    try {
+      await setPrefs(next);
+      go("bar");
+    } catch {
+      setError("Не удалось сохранить настройки. Проверь права на каталог и свободное место.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   useInput((input, key) => {
+    if (saving) return;
     if (key.escape) {
       const { prefs } = useAppStore.getState();
-      if (prefs.endpoint && prefs.token && prefs.model) {
+      if (isConfigured(prefs)) {
         setError(null);
-        go("bar");
+        back();
       } else {
         setError("Сначала заполни endpoint, token и модель.");
       }
@@ -78,7 +90,7 @@ export function SetupScreen() {
     }
     if (active === "submit") {
       if (key.return || input === " ") {
-        submit();
+        void submit();
       } else if (key.upArrow) {
         setIdx((i) => (i - 1 + FIELD_ORDER.length) % FIELD_ORDER.length);
       } else if (key.downArrow || key.tab) {
@@ -124,6 +136,7 @@ export function SetupScreen() {
             <TextInput
               value={endpoint}
               onChange={setEndpoint}
+              focus={!saving}
               placeholder="https://opencode.ai/zen/go/v1"
             />
           </Box>
@@ -138,6 +151,7 @@ export function SetupScreen() {
             <TextInput
               value={token}
               onChange={setToken}
+              focus={!saving}
               mask="•"
               placeholder="sk-…"
             />
@@ -153,6 +167,7 @@ export function SetupScreen() {
             <TextInput
               value={model}
               onChange={setModel}
+              focus={!saving}
               placeholder="deepseek-v4-pro"
             />
           </Box>
@@ -180,7 +195,7 @@ export function SetupScreen() {
             {active === "submit" ? "▸" : " "}
           </Text>
           <Text color={active === "submit" ? "cyan" : "white"} bold={active === "submit"}>
-            [{FIELD_LABELS.submit}]
+            [{saving ? "Сохранение…" : FIELD_LABELS.submit}]
           </Text>
         </Box>
       </Box>
