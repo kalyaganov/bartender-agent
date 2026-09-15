@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useStore, selectHistory } from "../state/store";
-import { executeTurn } from "../agent/loop";
+import { cancelCurrentTurn, executeTurn } from "../agent/loop";
 import { handleCommand } from "../agent/commands";
 import { ProviderError } from "../agent/providers/errors";
 import type {
@@ -119,6 +119,29 @@ describe("agent loop (M1)", () => {
     expect(bartenderLines.length).toBeGreaterThan(0);
   });
 
+  it("не сохраняет частичный ответ после ошибки", async () => {
+    const p = makeProvider(async function* () {
+      yield { type: "text-delta", text: "оборванный ответ" };
+      throw new ProviderError("Некорректный запрос (400)", "badRequest", false);
+    });
+    await expect(executeTurn(p, "эй")).rejects.toThrow(/запрос/);
+    const state = useStore.getState();
+    expect(state.streamingText).toBe("");
+    expect(state.lines.some((line) => line.text.includes("оборванный ответ"))).toBe(false);
+  });
+
+  it("abort очищает стрим без fallback-реплики", async () => {
+    const initialBartenderLines = useStore.getState().lines.filter((line) => line.speaker === "bartender").length;
+    const p = makeProvider(async function* () {
+      yield { type: "text-delta", text: "оборванный ответ" };
+      throw new DOMException("aborted", "AbortError");
+    });
+    await expect(executeTurn(p, "эй")).rejects.toMatchObject({ kind: "abort" });
+    const state = useStore.getState();
+    expect(state.streamingText).toBe("");
+    expect(state.lines.filter((line) => line.speaker === "bartender")).toHaveLength(initialBartenderLines);
+  });
+
   it("tool-flow: reply раскрывается машункой при пустом content", async () => {
     const p = toolProvider({
       reply: "Держи, приятель.",
@@ -222,6 +245,140 @@ describe("agent loop (M1)", () => {
     const sysLine = [...state.lines].reverse().find((l) => l.speaker === "system");
     expect(sysLine?.text).toContain("reasoning:");
     expect(sysLine?.text).toContain("оцениваю гостя...");
+    expect(sysLine?.text).toContain("ход: попыток=1");
+  });
+
+  it("выбирает tool.reply вместо content", async () => {
+    const p = makeProvider(async function* () {
+      yield { type: "text-delta", text: "Текст из content." };
+      yield {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "bartender_action",
+        args: {
+          reply: "Текст из инструмента.",
+          mood: "cheerful",
+          action: "chat",
+          drunkennessAssessment: { score: 1, cues: [] },
+        },
+      };
+      yield { type: "finish", finishReason: "tool-calls" };
+    });
+    await executeTurn(p, "привет");
+
+    const state = useStore.getState();
+    const last = [...state.lines].reverse().find((line) => line.speaker === "bartender");
+    expect(last?.text).toBe("Текст из инструмента.");
+    expect(state.lastTurnStatus).toMatchObject({
+      toolCallStatus: "valid",
+      contentConflict: true,
+      replySource: "tool-reply",
+    });
+  });
+
+  it("сохраняет content без tool-call, но не применяет действие", async () => {
+    const p = mockProvider(["Просто ответ."]);
+    await executeTurn(p, "привет");
+
+    const state = useStore.getState();
+    const last = [...state.lines].reverse().find((line) => line.speaker === "bartender");
+    expect(last?.text).toBe("Просто ответ.");
+    expect(state.lastTurnStatus).toMatchObject({
+      toolCallStatus: "missing",
+      replySource: "content",
+    });
+  });
+
+  it("игнорирует чужой tool-call и фиксирует его в диагностике", async () => {
+    const p = makeProvider(async function* () {
+      yield { type: "tool-call", toolCallId: "other", toolName: "other_tool", args: {} };
+      yield {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "bartender_action",
+        args: {
+          reply: "Держи стакан воды.",
+          mood: "cheerful",
+          action: "chat",
+          drunkennessAssessment: { score: 1, cues: [] },
+        },
+      };
+      yield { type: "finish", finishReason: "tool-calls" };
+    });
+    await executeTurn(p, "привет");
+
+    expect(useStore.getState().lastTurnStatus).toMatchObject({
+      toolCallStatus: "valid",
+      bartenderToolCalls: 1,
+      unexpectedToolCalls: 1,
+    });
+  });
+
+  it("не применяет неоднозначные tool-call", async () => {
+    const drinkAction = {
+      reply: "Наливаю.",
+      mood: "cheerful",
+      action: "pour_drink",
+      drink: { name: "Пиво", alcoholic: true, units: 1, price: 300 },
+      drunkennessAssessment: { score: 1, cues: [] },
+    };
+    const p = makeProvider(async function* () {
+      yield { type: "text-delta", text: "Секунду." };
+      yield { type: "tool-call", toolCallId: "c1", toolName: "bartender_action", args: drinkAction };
+      yield { type: "tool-call", toolCallId: "c2", toolName: "bartender_action", args: drinkAction };
+      yield { type: "finish", finishReason: "tool-calls" };
+    });
+    await executeTurn(p, "налей");
+
+    const state = useStore.getState();
+    expect(state.served).toHaveLength(0);
+    expect(state.lastTurnStatus).toMatchObject({
+      toolCallStatus: "multiple",
+      bartenderToolCalls: 2,
+      replySource: "content",
+    });
+  });
+
+  it("сбрасывает результат неудачной попытки перед retry", async () => {
+    let calls = 0;
+    const drinkAction = {
+      reply: "Наливаю.",
+      mood: "cheerful",
+      action: "pour_drink",
+      drink: { name: "Пиво", alcoholic: true, units: 1, price: 300 },
+      drunkennessAssessment: { score: 1, cues: [] },
+    };
+    const p = makeProvider(async function* () {
+      calls++;
+      yield { type: "tool-call", toolCallId: `c${calls}`, toolName: "bartender_action", args: drinkAction };
+      if (calls === 1) throw new ProviderError("ECONNRESET", "network", true, 1);
+      yield { type: "finish", finishReason: "tool-calls" };
+    });
+    await executeTurn(p, "налей");
+
+    const state = useStore.getState();
+    expect(calls).toBe(2);
+    expect(state.served).toHaveLength(1);
+    expect(state.lastTurnStatus.attempts).toBe(2);
+  });
+
+  it("отмена во время retry-backoff не запускает следующую попытку", async () => {
+    let calls = 0;
+    const p = makeProvider(async function* () {
+      calls++;
+      throw new ProviderError("ECONNRESET", "network", true, 1000);
+    });
+    const turn = executeTurn(p, "привет");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    cancelCurrentTurn();
+
+    await expect(turn).rejects.toMatchObject({ kind: "abort" });
+    expect(calls).toBe(1);
+    expect(useStore.getState().lastTurnStatus).toMatchObject({
+      attempts: 1,
+      errorKind: "abort",
+      replySource: "none",
+    });
   });
 });
 

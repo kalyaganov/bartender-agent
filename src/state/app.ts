@@ -18,7 +18,8 @@ interface AppState {
   go: (screen: Screen) => void;
   back: () => void;
   setScreen: (screen: Screen) => void;
-  setPrefs: (prefs: Preferences) => void;
+  hydratePrefs: (prefs: Preferences) => void;
+  setPrefs: (prefs: Preferences) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -31,9 +32,10 @@ export const useAppStore = create<AppState>((set) => ({
   back: () =>
     set((s) => ({ screen: s.prevScreen === s.screen ? "bar" : s.prevScreen })),
   setScreen: (screen) => set({ screen }),
+  hydratePrefs: (prefs) => set({ prefs }),
 
-  setPrefs: (prefs) => {
+  setPrefs: async (prefs) => {
+    await savePreferences(prefs);
     set({ prefs });
-    void savePreferences(prefs);
   },
 }));

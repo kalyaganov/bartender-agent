@@ -58,23 +58,28 @@ export async function loadPreferences(): Promise<Preferences> {
     const raw = await fs.readFile(FILE, "utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
+      const legacy = migrateLegacy(parsed);
+      if (isConfigured(legacy)) {
+        try {
+          await savePreferences(legacy);
+        } catch {}
+        return legacy;
+      }
+
       const obj = parsed as Preferences;
-      if (typeof obj.endpoint === "string" || typeof obj.token === "string") {
-        return {
-          ...(typeof obj.endpoint === "string" ? { endpoint: obj.endpoint } : {}),
-          ...(typeof obj.token === "string" ? { token: obj.token } : {}),
-          ...(typeof obj.model === "string" ? { model: obj.model } : {}),
-          ...(typeof obj.thinking === "boolean" ? { thinking: obj.thinking } : {}),
-          ...(obj.extraHeaders != null && typeof obj.extraHeaders === "object" && !Array.isArray(obj.extraHeaders)
-            ? { extraHeaders: obj.extraHeaders as Record<string, string> }
-            : {}),
-        };
+      const prefs: Preferences = {
+        ...(typeof obj.endpoint === "string" ? { endpoint: obj.endpoint } : {}),
+        ...(typeof obj.token === "string" ? { token: obj.token } : {}),
+        ...(typeof obj.model === "string" ? { model: obj.model } : {}),
+        ...(typeof obj.thinking === "boolean" ? { thinking: obj.thinking } : {}),
+      };
+      if (obj.extraHeaders != null && typeof obj.extraHeaders === "object" && !Array.isArray(obj.extraHeaders)) {
+        const extraHeaders = Object.fromEntries(
+          Object.entries(obj.extraHeaders).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        );
+        prefs.extraHeaders = extraHeaders;
       }
-      const migrated = migrateLegacy(parsed);
-      if (migrated.endpoint || migrated.token || migrated.model) {
-        await savePreferences(migrated);
-        return migrated;
-      }
+      return prefs;
     }
     return {};
   } catch {
@@ -82,17 +87,22 @@ export async function loadPreferences(): Promise<Preferences> {
   }
 }
 
-export async function savePreferences(prefs: Preferences): Promise<void> {
-  await migrateLegacyDir();
-  try {
+let saveQueue: Promise<void> = Promise.resolve();
+
+export function savePreferences(prefs: Preferences): Promise<void> {
+  const contents = JSON.stringify(prefs, null, 2);
+  const operation = saveQueue.then(async () => {
+    await migrateLegacyDir();
     await fs.mkdir(DIR, { recursive: true });
-    await fs.writeFile(FILE, JSON.stringify(prefs, null, 2), {
+    const tempFile = `${FILE}.${process.pid}.tmp`;
+    await fs.writeFile(tempFile, contents, {
       encoding: "utf8",
       mode: 0o600,
     });
-  } catch {
-    /* персистентность опциональна — тихо игнорируем */
-  }
+    await fs.rename(tempFile, FILE);
+  });
+  saveQueue = operation.catch(() => {});
+  return operation;
 }
 
 export function getPrefsPath(): string {

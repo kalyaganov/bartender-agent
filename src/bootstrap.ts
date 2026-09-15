@@ -18,6 +18,6 @@ export function resolveInitialScreen(prefs: Preferences): InitialScreen {
 export async function bootstrap(): Promise<void> {
   const prefs = await loadPreferences();
   const store = useAppStore.getState();
-  store.setPrefs(prefs);
+  store.hydratePrefs(prefs);
   store.setScreen(resolveInitialScreen(prefs));
 }

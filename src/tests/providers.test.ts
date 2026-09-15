@@ -439,6 +439,18 @@ describe("OpenAIProvider error chunk handling (FR5)", () => {
     }
   });
 
+  it("классифицирует SSE 401 как auth", async () => {
+    createMock.mockResolvedValue(fakeStream([errorChunk("unauthorized", undefined, 401)]));
+    const p = makeProvider();
+    await expect(collect(p)).rejects.toMatchObject({ kind: "auth", retryable: false });
+  });
+
+  it("классифицирует строковый SSE code 429 как rateLimit", async () => {
+    createMock.mockResolvedValue(fakeStream([errorChunk("limited", "429")]));
+    const p = makeProvider();
+    await expect(collect(p)).rejects.toMatchObject({ kind: "rateLimit", retryable: true });
+  });
+
   it("error без статуса — unknown, не ретраится", async () => {
     createMock.mockResolvedValue(
       fakeStream([errorChunk("unknown error")]),

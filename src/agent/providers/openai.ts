@@ -85,20 +85,22 @@ export class OpenAIProvider implements LLMProvider {
 
     try {
       for await (const chunk of stream) {
-        const errorChunk = chunk as { object?: string; error?: { message?: string; code?: string | number; status?: number } };
+        const errorChunk = chunk as { object?: string; error?: { message?: string; code?: string | number; status?: string | number } };
         if (errorChunk.object === "error") {
-          const errStatus = typeof errorChunk.error?.status === "number"
-            ? errorChunk.error.status
-            : typeof errorChunk.error?.code === "number"
-              ? errorChunk.error.code
-              : undefined;
+          const rawStatus = errorChunk.error?.status ?? errorChunk.error?.code;
+          const parsedStatus = typeof rawStatus === "string" ? Number(rawStatus) : rawStatus;
           const errMessage = errorChunk.error?.message ?? "Stream error";
-          if (errStatus === undefined) {
+          if (typeof parsedStatus !== "number" || !Number.isInteger(parsedStatus)) {
             throw new ProviderError(errMessage, "unknown", false);
           }
-          const kind = errStatus >= 400 && errStatus < 500 ? "badRequest" as const : "network" as const;
-          const retryable = errStatus >= 500;
-          throw new ProviderError(errMessage, kind, retryable);
+          const classified = toProviderError({ status: parsedStatus, message: errMessage });
+          throw new ProviderError(
+            errMessage,
+            classified.kind,
+            classified.retryable,
+            classified.retryAfterMs,
+            classified,
+          );
         }
 
         if (chunk.usage) usage = chunk.usage;

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Mood } from "../agent/schemas";
 import type { BartenderAction } from "../agent/schemas";
 import type { Message, Usage } from "../agent/providers/types";
+import type { ProviderErrorKind } from "../agent/providers/errors";
 import { config } from "../config";
 import {
   applyAction,
@@ -18,11 +19,34 @@ export interface Line {
   text: string;
 }
 
+export type ToolCallStatus = "missing" | "invalid" | "multiple" | "valid";
+export type TurnReplySource = "content" | "tool-reply" | "fallback" | "none";
+
+export interface TurnStatus {
+  attempts: number;
+  toolCallStatus: ToolCallStatus;
+  bartenderToolCalls: number;
+  unexpectedToolCalls: number;
+  contentConflict: boolean;
+  replySource: TurnReplySource;
+  errorKind?: ProviderErrorKind;
+}
+
+const initialTurnStatus: TurnStatus = {
+  attempts: 0,
+  toolCallStatus: "missing",
+  bartenderToolCalls: 0,
+  unexpectedToolCalls: 0,
+  contentConflict: false,
+  replySource: "none",
+};
+
 interface SessionState extends GameState {
   lines: Line[];
   streamingText: string;
   lastReasoning: string;
   lastUsage?: Usage;
+  lastTurnStatus: TurnStatus;
   busy: boolean;
   barTimeMin: number;
   pouring: string | null;
@@ -39,7 +63,10 @@ interface SessionState extends GameState {
   appendStreamingToken: (token: string) => void;
   appendReasoning: (token: string) => void;
   recordUsage: (usage: Usage | undefined) => void;
+  recordTurnStatus: (status: TurnStatus) => void;
   finalizeStreaming: () => void;
+  replaceStreamingText: (text: string) => void;
+  discardStreaming: () => void;
   setBusy: (busy: boolean) => void;
 
   reset: () => void;
@@ -57,6 +84,7 @@ export const useStore = create<SessionState>((set) => ({
   lines: initialLines,
   streamingText: "",
   lastReasoning: "",
+  lastTurnStatus: initialTurnStatus,
   busy: false,
   barTimeMin: START_BAR_MIN,
   pouring: null,
@@ -105,6 +133,7 @@ export const useStore = create<SessionState>((set) => ({
   appendReasoning: (token) =>
     set((s) => ({ lastReasoning: s.lastReasoning + token })),
   recordUsage: (usage) => set({ lastUsage: usage }),
+  recordTurnStatus: (status) => set({ lastTurnStatus: status }),
   finalizeStreaming: () =>
     set((s) => {
       const text = s.streamingText.trim();
@@ -114,6 +143,8 @@ export const useStore = create<SessionState>((set) => ({
         lines: [...s.lines, { speaker: "bartender", text }],
       };
     }),
+  replaceStreamingText: (text) => set({ streamingText: text }),
+  discardStreaming: () => set({ streamingText: "" }),
   setBusy: (busy) => set({ busy }),
 
   reset: () =>
@@ -122,6 +153,8 @@ export const useStore = create<SessionState>((set) => ({
       lines: initialLines,
       streamingText: "",
       lastReasoning: "",
+      lastUsage: undefined,
+      lastTurnStatus: initialTurnStatus,
       busy: false,
       barTimeMin: START_BAR_MIN,
       pouring: null,
