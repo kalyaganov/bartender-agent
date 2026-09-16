@@ -2,6 +2,7 @@ import { useStore } from "../state/store";
 import { useAppStore } from "../state/app";
 import { formatMenu } from "../data/cocktails";
 import { exitApp } from "../shutdown";
+import { cancelCurrentTurn } from "./loop";
 
 export const HELP =
   "/menu — меню · /setup — настроить подключение и модель · /settings — настройки · " +
@@ -39,24 +40,12 @@ export function handleCommand(text: string): boolean {
       store.addSystemLine(HELP);
       return true;
     case "/settings":
-      if (store.busy) {
-        store.addSystemLine("Виктор отвечает, подожди секунду…");
-        return true;
-      }
+      if (store.busy) cancelCurrentTurn();
       useAppStore.getState().go("menu");
       return true;
     case "/setup":
-      if (store.busy) {
-        store.addSystemLine("Виктор отвечает, подожди секунду…");
-        return true;
-      }
-      useAppStore.getState().go("setup");
-      return true;
     case "/provider":
-      if (store.busy) {
-        store.addSystemLine("Виктор отвечает, подожди секунду…");
-        return true;
-      }
+      if (store.busy) cancelCurrentTurn();
       useAppStore.getState().go("setup");
       return true;
     case "/exit":

@@ -9,6 +9,8 @@ import type { Line } from "../state/store";
 import { BarScreen } from "../ui/BarScreen";
 import { Face } from "../ui/Face";
 import { useStore } from "../state/store";
+import { useAppStore } from "../state/app";
+import { App } from "../App";
 
 function lines(n: number, speaker: Line["speaker"] = "bartender"): Line[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -58,6 +60,25 @@ describe("DialoguePanel (SPEC-ui T1)", () => {
     const frame = lastFrame() ?? "";
     expect(frame).toContain("пишу");
     expect(frame).not.toContain("Виктор задумался");
+  });
+
+  it("переносит длинную реплику и укладывает её в лимит строк", () => {
+    const text = "очень длинная реплика для проверки переноса по словам";
+    const { lastFrame } = render(
+      <DialoguePanel
+        lines={[{ speaker: "bartender", text }]}
+        streaming=""
+        busy={false}
+        maxLines={6}
+        columns={30}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("очень длинная");
+    expect(frame).toContain("проверки");
+    expect(frame).toContain("переноса по");
+    expect(frame).not.toContain("…");
+    expect(frame.trim().split("\n").length).toBeLessThanOrEqual(6);
   });
 });
 
@@ -127,6 +148,34 @@ describe("командный попап", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(lastFrame()).toContain("Вы:");
     expect(lastFrame()).toContain("/");
+    unmount();
+  });
+
+  it("открывает /setup из чата", async () => {
+    useStore.getState().reset();
+    useAppStore.setState({ screen: "bar", prevScreen: "bar", prefs: {} });
+    const { stdin, unmount } = render(<App />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stdin.write("/setup");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stdin.write("\r");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useAppStore.getState().screen).toBe("setup");
+    unmount();
+  });
+
+  it("открывает /setup во время ответа и отменяет текущий ход", async () => {
+    useStore.getState().reset();
+    useStore.getState().setBusy(true);
+    useAppStore.setState({ screen: "bar", prevScreen: "bar", prefs: {} });
+    const { stdin, unmount } = render(<App />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stdin.write("/setup");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stdin.write("\r");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useAppStore.getState().screen).toBe("setup");
+    useStore.getState().setBusy(false);
     unmount();
   });
 });

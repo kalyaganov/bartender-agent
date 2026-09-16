@@ -62,13 +62,15 @@ function ImageFace({ mood, thinking }: { mood: Mood; thinking: boolean }) {
   const sequence = protocol ? getFaceImageSequence(displayMood, protocol) : null;
 
   useEffect(() => {
-    if (!protocol || !sequence) return;
-    process.stdout.write(
-      clearTerminalImages(protocol) + placeTerminalImage(sequence),
-    );
+    if (!protocol) return;
     return () => {
       process.stdout.write(clearTerminalImages(protocol));
     };
+  }, [protocol]);
+
+  useEffect(() => {
+    if (!protocol || !sequence) return;
+    process.stdout.write(clearTerminalImages(protocol) + placeTerminalImage(sequence));
   }, [protocol, sequence]);
 
   if (!sequence) return <AsciiFace mood={displayMood} />;

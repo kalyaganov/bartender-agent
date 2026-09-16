@@ -73,11 +73,9 @@ export function BarScreen() {
 
   const faceRows = getTerminalImageProtocol() ? FACE_IMAGE_ROWS : ASCII_FACE_ROWS;
   const thinking = busy && !streaming;
+  const popupRows = popupItems.length ? popupItems.length + 1 : 0;
   const overhead = FIXED_OVERHEAD + faceRows - ASCII_FACE_ROWS + (pouring ? 1 : 0);
-  const dialogueMaxLines = Math.max(
-    2,
-    vp.rows - overhead - popupItems.length,
-  );
+  const dialogueMaxLines = Math.max(0, vp.rows - overhead - popupRows);
 
   useInput((_input, key) => {
     if (key.escape && !inputValue) {
@@ -98,7 +96,8 @@ export function BarScreen() {
 
   const handleSubmit = (text: string) => {
     setInputValue("");
-    const resolved = popupItems.length > 0 ? popupItems[cmdIndex].name : text;
+    const exactCommand = popupItems.find((item) => item.name === text.toLowerCase());
+    const resolved = exactCommand?.name ?? popupItems[cmdIndex]?.name ?? text;
     if (handleCommand(resolved)) return;
     if (busy) return;
     void runTurn(resolved).catch((error: unknown) => {
@@ -131,6 +130,7 @@ export function BarScreen() {
         streaming={streaming}
         busy={busy}
         maxLines={dialogueMaxLines}
+        columns={vp.columns}
       />
 
       <CocktailAnimation />
